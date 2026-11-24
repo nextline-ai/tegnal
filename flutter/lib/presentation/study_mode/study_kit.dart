@@ -1014,6 +1014,7 @@ abstract final class StudyGlyph {
     'folder' => CupertinoIcons.folder,
     'puzzlepiece' => CupertinoIcons.cube,
     'snowflake' => CupertinoIcons.snow,
+    'text.viewfinder' => CupertinoIcons.viewfinder,
     'sunset' => CupertinoIcons.sunset,
     'text.alignleft' => CupertinoIcons.text_alignleft,
     'scope' => CupertinoIcons.scope,

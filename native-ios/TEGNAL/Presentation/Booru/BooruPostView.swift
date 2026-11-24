@@ -745,8 +745,7 @@ struct BooruPostView: View {
                     Link(L10n.text("Open on Website"), destination: server.pageURL(post: post))
                 }
                 Section {
-                    NavigationLink { StudyPromptView(post: post, source: source) } label: { Label(L10n.text("View as a Prompt"), systemImage: "text.cursor") }
-                        .accessibilityIdentifier("booru.prompt")
+                    PromptAnalyzerRow(post: post, source: source)
                 }
                 ForEach(ArtworkTagGroup.make(tags: post.tags, artists: post.artists, categories: post.tagCategories ?? [:], mode: .images)) { group in
                     Section {

@@ -26,6 +26,8 @@ struct LearningCourse: Identifiable, Sendable {
     let lessons: TagCourse?
     /// Imported by the learner from a course file, rather than bundled.
     let imported: Bool
+    /// Bought in the shop and downloaded from TEGNAL: it pays 보석, and no file may take its id.
+    var official = false
 
     var title: String { deck?.title ?? lessons?.title.resolved() ?? L10n.text("Tag Study") }
 }
@@ -41,6 +43,8 @@ struct WaitingCourse: Identifiable, Sendable, Equatable {
 final class LearningCourses {
     static let shared = LearningCourses()
 
+    /// Courses bought in the shop and downloaded, read from their files.
+    private(set) var official: [LearningCourse] = []
     /// Imported courses, read from their files.
     private(set) var imported: [LearningCourse] = []
     /// Imported files this version of the app cannot play yet.
@@ -51,6 +55,8 @@ final class LearningCourses {
     init(folder: URL = LearningCourses.defaultFolder) {
         self.folder = folder
         (imported, waiting) = Self.load(folder)
+        official = Self.loadOfficial(folder.appending(path: "shop", directoryHint: .isDirectory))
+        imported.removeAll { course in official.contains { $0.id == course.id } }
     }
 
     nonisolated static var defaultFolder: URL {
@@ -61,7 +67,7 @@ final class LearningCourses {
     static let tags = LearningCourse(id: LearningCourse.tagsID, engine: .tags, item: LabStore.tagCourse, deck: nil, lessons: nil, imported: false)
     static let bundled = [lab, tags]
 
-    var all: [LearningCourse] { Self.bundled + imported }
+    var all: [LearningCourse] { Self.bundled + official + imported }
 
     func course(_ id: String) -> LearningCourse? { all.first { $0.id == id } }
 
@@ -81,6 +87,7 @@ final class LearningCourses {
     func add(data: Data) throws -> LearningCourse {
         do {
             let course = try LabCourseFile.decode(data)
+            guard !official.contains(where: { $0.id == course.id }) else { throw LabCourseFileError.reserved }
             try keep(course.id, data)
             imported.removeAll { $0.id == course.id }
             waiting.removeAll { $0.id == course.id }
@@ -110,6 +117,44 @@ final class LearningCourses {
     }
 
     private func file(_ id: String) -> URL { folder.appending(path: id + ".json") }
+
+    // MARK: Courses from the shop
+
+    private var shopFolder: URL { folder.appending(path: "shop", directoryHint: .isDirectory) }
+
+    /// True when the course a shop item sells is on this device.
+    func has(item: String) -> Bool { official.contains { $0.item == item } }
+
+    /// Keeps a course file the shop delivered for an item, already checked against the signed list. An imported course with the
+    /// same id is taken out of the way: the official one replaces it, and its records stay.
+    @discardableResult
+    func addOfficial(data: Data, item: String) throws -> LearningCourse {
+        let course = Self.official(try LabCourseFile.decode(data), item: item)
+        try FileManager.default.createDirectory(at: shopFolder, withIntermediateDirectories: true)
+        try data.write(to: shopFolder.appending(path: item + ".json"), options: .atomic)
+        if imported.contains(where: { $0.id == course.id }) { remove(course.id) }
+        official.removeAll { $0.item == item }
+        official.append(course)
+        return course
+    }
+
+    /// A course read from its file, as one sold by the shop.
+    private static func official(_ course: LearningCourse, item: String) -> LearningCourse {
+        var deck = course.deck
+        deck?.official = true
+        var result = LearningCourse(id: course.id, engine: course.engine, item: item, deck: deck, lessons: course.lessons, imported: false)
+        result.official = true
+        return result
+    }
+
+    private static func loadOfficial(_ folder: URL) -> [LearningCourse] {
+        let files = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
+        return files.filter { $0.pathExtension == "json" }.sorted { $0.lastPathComponent < $1.lastPathComponent }.compactMap { url in
+            guard let data = try? Data(contentsOf: url), let course = try? LabCourseFile.decode(data),
+                  !LabCourseFile.reserved.contains(course.id) else { return nil }
+            return official(course, item: url.deletingPathExtension().lastPathComponent)
+        }
+    }
 
     /// Reads the kept files, oldest first. A file this app is too old for waits; one that no longer passes the checks is left out.
     private static func load(_ folder: URL) -> ([LearningCourse], [WaitingCourse]) {

@@ -245,6 +245,8 @@ struct TEGNALApp: App {
                 launchThermalAllowed = ProcessInfo.processInfo.thermalState != .serious && ProcessInfo.processInfo.thermalState != .critical
                 env.setCoverQueueActive(scenePhase == .active)
             }
+            // An update TEGNAL asks for, once the app is open.
+            .appNotice(active: scenePhase == .active && !isSplashScreenVisible)
             .preferredColorScheme(env.appTheme.colorScheme)
             .environment(\.locale, Locale(identifier: L10n.language))
             .id(env.appLanguage)

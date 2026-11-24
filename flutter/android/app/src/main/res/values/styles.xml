@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- The window while the process starts (before Android 12): the home scene's blurred still. -->
+    <!-- The window while the process starts (before Android 12): plain black. -->
     <style name="LaunchTheme" parent="@android:style/Theme.Black.NoTitleBar">
         <!-- Removed when the cover view takes over, which the Flutter UI's first frame triggers. -->
         <item name="android:windowBackground">@drawable/launch_background</item>

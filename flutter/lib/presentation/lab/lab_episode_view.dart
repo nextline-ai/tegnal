@@ -10,7 +10,7 @@ import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../../core/lab/lab_course.dart';
-import '../../core/lab/lab_sheet.dart';
+import '../../core/lab/lab_shop.dart';
 import '../../core/lab/lab_store.dart';
 import '../../core/support/l10n.dart';
 import '../../core/support/privacy_settings.dart';
@@ -90,7 +90,7 @@ class _LabEpisodeViewState extends State<LabEpisodeView> {
   /// After the card is put in the deck: the 보석 it paid on a page of their own, then the season's page when this card
   /// finished it, else back to the deck.
   void _closeEngraving() {
-    if ((engraving?.total ?? 0) > 0 && !store.course.imported) return setState(() => phase = _Phase.gems);
+    if ((engraving?.total ?? 0) > 0 && store.pays) return setState(() => phase = _Phase.gems);
     _closeGems();
   }
 
@@ -768,7 +768,7 @@ class _LabEngraveViewState extends State<LabEngraveView> with TickerProviderStat
             ),
           ]),
           // An imported course pays no 보석, so it has no row for it.
-          if (!widget.store.course.imported) ...[
+          if (widget.store.pays) ...[
             divider,
             // What paid; the balance climbs on the page that follows.
             row(const Key('lab.engrave.income'), widget.store.shop.currency.text, [

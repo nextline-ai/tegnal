@@ -18,6 +18,7 @@ import 'booru_account_views.dart';
 import 'booru_common.dart';
 import 'booru_feed_view.dart';
 import 'booru_post_view.dart' show openExternalLink;
+import '../study/prompt_analyzer.dart';
 import '../study/study_tag_view.dart';
 import '../study/study_widgets.dart' show StudyPresentation, StudySymbols;
 
@@ -234,22 +235,7 @@ class _DetailsPageState extends State<_DetailsPage> {
               FormSection(
                 rowColor: row,
                 children: [
-                  FormRow(
-                    key: const Key('booru.prompt'),
-                    onTap: () => Navigator.of(context).push(
-                      CupertinoPageRoute<void>(
-                        builder: (context) => StudyPromptView(booru: _booru, post: _post),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(StudySymbols.prompt, size: 22, color: tint),
-                        const SizedBox(width: 12),
-                        Expanded(child: Text(L10n.text('View as a Prompt'))),
-                        Icon(CupertinoIcons.chevron_right, size: 14, color: TegnalColors.tertiaryLabel.resolveFrom(context)),
-                      ],
-                    ),
-                  ),
+                  PromptAnalyzerRow(booru: _booru, post: _post, tint: tint),
                 ],
               ),
               for (final group in groups) ...[

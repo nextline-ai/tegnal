@@ -21,7 +21,9 @@ import 'core/booru/booru_image_cache.dart';
 import 'core/booru/booru_models.dart';
 import 'core/booru/booru_store.dart';
 import 'core/lab/lab_course.dart';
+import 'core/lab/lab_goods.dart';
 import 'core/lab/lab_sheet.dart';
+import 'core/lab/lab_shop.dart';
 import 'core/lab/lab_store.dart';
 import 'core/lab/learning_courses.dart';
 import 'core/lab/tag_course.dart';
@@ -40,6 +42,7 @@ import 'core/storage/app_storage.dart';
 import 'core/support/document_files.dart';
 import 'core/support/perf_trace.dart';
 import 'core/support/preferences.dart';
+import 'app/app_notice.dart';
 import 'core/support/secure_secret_store.dart';
 import 'presentation/booru/booru_web_page.dart';
 import 'presentation/content/content_browser_transport.dart';
@@ -118,7 +121,10 @@ void _seedLibrary(AppDatabase database, Set<String> names) {
 
 /// The AI lab's scripts, shop, check and cheat sheet.
 Future<void> _loadLab() async {
-  await Future.wait([LabCourse.loadBundled(), LabShop.loadBundled(), LabDiagnosis.loadBundled(), LabEdition.loadBundled()]);
+  await Future.wait([LabCourse.loadBundled(), LabDiagnosis.loadBundled(), LabEdition.loadBundled(), HomeScenes.prepare()]);
+  // The shop list is not in the app: the copy read from TEGNAL's server last time, until it is read again.
+  final shop = await LabShopSource.saved();
+  if (shop != null) LabStore.shared.use(shop);
   final saved = await LabSheetSource.saved();
   if (saved != null) LabStore.shared.show(saved);
 }
@@ -249,6 +255,10 @@ Future<AppServices> _launch() async {
   ReaderPreferences.install(preferences);
   // Learning mode reads whether it opens the app, and its sounds' switch, from the image-mode preferences.
   StudyMode.shared.attach(preferences.booruDefaults);
+  // TEGNAL's update notice compares this build, and remembers a notice put off.
+  AppNotices.shared
+    ..build = int.tryParse(await _build()) ?? 0
+    ..putOffStore = (read: () => preferences.defaults.string('app.notice.putOff'), write: (id) => preferences.defaults.set('app.notice.putOff', id));
   // Whether AI translation can be on; asked early, as Translate needs the answer.
   unawaited(AITranslationModel.check());
   final localizing = PerfTrace.span('launch localization', () => loadLocalization(preferences.defaults));
@@ -290,6 +300,7 @@ Future<AppServices> _launch() async {
   await loadingTimeZone;
   final booru = PerfTrace.sync('launch image store', () => BooruStore(path: AppStorage.booruDbPath, preferences: preferences, credentials: credentials));
   AddonRuntime.shared.reload(booru);
+  LabGoods.shared.attach(booru);
   // The lab's records live in the image database and travel with it; a sync or a restored backup may bring new ones.
   LabStore.shared.attach(booru.database);
   // Courses the learner imported in the 코스 tab, one checked file each.

@@ -8,7 +8,7 @@ import 'package:pointycastle/export.dart';
 import '../addons/addon_market.dart';
 import 'lab_course.dart';
 
-// The cheat sheet (Layer 2) and the shop. Ported from `LabSheet.swift`.
+// The cheat sheet (Layer 2). Ported from `LabSheet.swift`; the shop is in `lab_shop.dart`.
 
 /// One edition of the cheat sheet: what to use for which job right now. Editions come irregularly.
 /// The app carries one in `assets/lab/cheatsheet.json`; newer ones are downloaded, signed with TEGNAL's add-on key, and kept.
@@ -215,104 +215,4 @@ class LabSheetSource {
       return null;
     }
   }
-}
-
-// MARK: - The shop
-
-/// What 보석 buys. `assets/lab/shop.json`.
-class LabShop {
-  const LabShop({required this.currency, this.note, required this.sections});
-  final LabText currency;
-  final LabText? note;
-  final List<LabShopSection> sections;
-
-  List<LabShopItem> get items => [for (final section in sections) ...section.items];
-  LabShopItem? item(String id) => items.where((item) => item.id == id).firstOrNull;
-
-  /// The permanent goods together: what can be owned once, not used up. The cards are priced against this.
-  int get permanentTotal => items.where((item) => !item.isRepeat).fold(0, (total, item) => total + (item.price ?? 0));
-
-  static final empty = LabShop(currency: LabText.plain('보석'), sections: const []);
-  static LabShop? _bundled;
-  static LabShop get bundled => _bundled ?? empty;
-  static void useBundled(LabShop? shop) => _bundled = shop;
-
-  static LabShop parse(Object? json) {
-    final map = json! as Map;
-    return LabShop(
-      currency: LabText.parse(map['currency']),
-      note: LabText.parseOrNull(map['note']),
-      sections: [
-        for (final value in map['sections'] as List)
-          LabShopSection(title: LabText.parse((value as Map)['title']), items: [for (final item in value['items'] as List) LabShopItem.parse(item as Map)]),
-      ],
-    );
-  }
-
-  static Future<LabShop> loadBundled([AssetBundle? bundle]) async {
-    if (_bundled != null) return _bundled!;
-    try {
-      return _bundled = parse(jsonDecode(await (bundle ?? rootBundle).loadString('assets/lab/shop.json')));
-    } on Object {
-      return empty;
-    }
-  }
-}
-
-class LabShopSection {
-  const LabShopSection({required this.title, required this.items});
-  final LabText title;
-  final List<LabShopItem> items;
-}
-
-class LabShopItem {
-  const LabShopItem({
-    required this.id,
-    required this.kind,
-    required this.name,
-    this.summary,
-    this.symbol,
-    this.price,
-    this.limited,
-    this.repeat,
-    this.soon,
-    this.requires,
-  });
-  final String id;
-
-  /// `course`, `home`, `ticket` or `addon`.
-  final String kind;
-  final LabText name;
-  final LabText? summary;
-  final String? symbol;
-  final int? price;
-
-  /// Sold with a limited-sale label: it may not stay on sale.
-  final bool? limited;
-
-  /// Can be bought again, such as tickets that are used up.
-  final bool? repeat;
-
-  /// Shown, but not on sale yet.
-  final bool? soon;
-
-  /// The item that must be owned first, such as 2D AI 배우기 for the tickets its picture generator uses.
-  final String? requires;
-
-  bool get isLimited => limited ?? false;
-  bool get isRepeat => repeat ?? false;
-  bool get isSoon => soon ?? false;
-
-  static LabShopItem parse(Map json) => LabShopItem(
-    id: json['id'] as String,
-    kind: json['kind'] as String,
-    name: LabText.parse(json['name']),
-    summary: LabText.parseOrNull(json['summary']),
-    symbol: json['symbol'] as String?,
-    price: (json['price'] as num?)?.toInt(),
-    limited: json['limited'] as bool?,
-    repeat: json['repeat'] as bool?,
-    soon: json['soon'] as bool?,
-    requires: json['requires'] as String?,
-  );
 }

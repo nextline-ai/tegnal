@@ -38,6 +38,8 @@ struct LabPurchase: Codable, Equatable, Sendable {
     var price: Int
     var count: Int
     var date: Date
+    /// Tickets each purchase brought, for ticket goods.
+    var each: Int? = nil
 }
 
 /// What settling 2D AI 배우기 paid, by kind, for the treasure chest a lesson opens.
@@ -78,7 +80,10 @@ final class LabStore {
     let main: LabCourse
     /// The deck course on screen: the AI lab, or one the learner imported.
     private(set) var course: LabCourse
-    let shop: LabShop
+    /// What the shop sells: the list last read from TEGNAL's server, or, until one is read, the few goods the app carries
+    /// (`LabShop.builtIn`: the 2D course and the prompt analyzer, so they can be bought offline).
+    private(set) var shop: LabShop
+    private(set) var shopState: ShopState
     let diagnosis: LabDiagnosis?
     private(set) var progress: LabProgress
     /// The cheat-sheet edition shown: the newest of the bundled, saved and downloaded copies.
@@ -86,10 +91,15 @@ final class LabStore {
     /// Where the records are kept: the image database once it is reached, so they travel in iCloud sync and backups.
     private var records: LabRecordStore
 
-    init(course: LabCourse = .bundled, shop: LabShop = .bundled, diagnosis: LabDiagnosis? = .bundled, records: LabRecordStore = LabMemoryRecords(), edition: LabEdition? = LabEdition.newest()) {
+    /// Where the shop list stands. `newer`: the server's list is for a later app.
+    enum ShopState: Equatable { case loading, ready, failed, newer }
+
+    init(course: LabCourse = .bundled, shop: LabShop? = LabShopSource.saved(), diagnosis: LabDiagnosis? = .bundled, records: LabRecordStore = LabMemoryRecords(), edition: LabEdition? = LabEdition.newest()) {
         self.main = course
         self.course = course
-        self.shop = shop
+        // Until a list from the server is read, the goods the app carries are for sale.
+        self.shop = shop ?? .builtIn
+        shopState = shop == nil ? .loading : .ready
         self.diagnosis = diagnosis
         self.records = records
         self.edition = edition
@@ -115,6 +125,27 @@ final class LabStore {
         do { try records.replace(with: progress.records) } catch { assertionFailure("Lab records could not be saved: \(error)") }
     }
 
+    /// Reads the shop list from TEGNAL's server. A list that cannot be read keeps the last one; a list for a later app hides it.
+    func refreshShop(market: AddonMarket = .live) async {
+        do {
+            let fresh = try await LabShopSource.fetch(market: market)
+            shop = fresh
+            shopState = .ready
+        } catch LabShopError.newer {
+            // An old list is not sold from once a newer one is out; the goods the app carries still are.
+            shop = .builtIn
+            shopState = .newer
+        } catch {
+            if shopState != .ready { shopState = .failed }
+        }
+    }
+
+    /// Uses a list read elsewhere, as in tests.
+    func use(_ shop: LabShop) {
+        self.shop = shop
+        shopState = .ready
+    }
+
     /// Shows another deck course. Its cards, 망작 and rate are read from now on; the money stays the AI lab's.
     func show(course: LabCourse) {
         guard course.id != self.course.id || course.episodes.count != self.course.episodes.count else { return }
@@ -125,6 +156,8 @@ final class LabStore {
     /// course's are put under its id, so two courses never meet.
     func key(_ id: String) -> String { Self.key(id, in: course) }
     nonisolated static func key(_ id: String, in course: LabCourse) -> String { course.imported ? course.id + "/" + id : id }
+    /// True when the course on screen pays 보석: the AI lab, and the courses bought in the shop.
+    var pays: Bool { !course.imported || course.official }
 
     // MARK: Cards
 
@@ -169,7 +202,7 @@ final class LabStore {
     func engrave(_ episode: LabEpisode, failsHung: Int) -> LabEngraving {
         let before = rate
         let first = progress.cards[key(episode.id)] == nil
-        let pays = !course.imported
+        let pays = self.pays
         if first {
             progress.cards[key(episode.id)] = LabStore.now
             if pays { progress.cardGems[key(episode.id)] = episode.reward }
@@ -178,9 +211,9 @@ final class LabStore {
         let left = episode.fails.filter { progress.fails[key($0.id)] == nil }.count
         let finished = course.season(of: episode).flatMap { first && complete($0) ? $0.number : nil }
         var seasonReward = 0
-        if let finished, pays, course.info.rewards.season > 0, progress.seasonGems[String(finished)] == nil {
+        if let finished, pays, course.info.rewards.season > 0, progress.seasonGems[key(String(finished))] == nil {
             seasonReward = course.info.rewards.season
-            progress.seasonGems[String(finished)] = seasonReward
+            progress.seasonGems[key(String(finished))] = seasonReward
             save()
         }
         return LabEngraving(before: before, after: rate, cardReward: first && pays ? episode.reward : 0, failReward: pays ? failsHung * course.info.rewards.fail : 0,
@@ -192,7 +225,7 @@ final class LabStore {
     func hung(_ fail: LabFail) -> Bool { progress.fails[key(fail.id)] != nil }
 
     /// What hanging one 망작 pays in the course on screen: nothing in an imported course.
-    var failReward: Int { course.imported ? 0 : course.info.rewards.fail }
+    var failReward: Int { pays ? course.info.rewards.fail : 0 }
 
     /// Hangs a 망작 in the gallery. True the first time, when it also pays.
     @discardableResult
@@ -250,18 +283,26 @@ final class LabStore {
         let seasons = main.seasons.filter { $0.episodes.allSatisfy { progress.cards[$0] != nil } }
             .reduce(0) { $0 + (progress.seasonGems[String($1.number)] ?? main.info.rewards.season) }
         let editions = progress.editions.values.reduce(0, +)
-        return cards + fails + seasons + editions + progress.coursePaid.values.reduce(0, +)
+        // The courses bought in the shop keep theirs under `<course>/…`; an imported course's records there never hold an amount.
+        func namespaced(_ paid: [String: Int]) -> Int { paid.filter { $0.key.contains("/") }.values.reduce(0, +) }
+        let official = namespaced(progress.cardGems) + namespaced(progress.failGems) + namespaced(progress.seasonGems)
+        return cards + fails + seasons + editions + official + progress.coursePaid.values.reduce(0, +)
     }
     var spent: Int { progress.purchases.values.reduce(0) { $0 + $1.price * $1.count } }
     var balance: Int { income - spent }
 
     func owns(_ id: String) -> Bool { (progress.purchases[id]?.count ?? 0) > 0 }
     var ownsTagCourse: Bool { owns(Self.tagCourse) }
+    /// True once the feature's key was bought (`feature.<id>`). Needs no shop list: the record says it.
+    func unlocked(_ feature: LabFeature) -> Bool { owns(feature.item) }
+    /// Tickets bought. Nothing spends them yet: drawing with them needs TEGNAL's own generation server (`docs/features/live-shop.md` §5).
+    var tickets: Int { progress.purchases.values.reduce(0) { $0 + $1.count * ($1.each ?? 0) } }
 
-    /// `needs`: another item (by id) must be owned first.
-    enum BuyResult: Equatable { case bought, owned, short(Int), needs(String), unavailable }
+    /// `needs`: another item (by id) must be owned first. `update`: this app does not know the item; a newer one does.
+    enum BuyResult: Equatable { case bought, owned, short(Int), needs(String), unavailable, update }
 
     func canBuy(_ item: LabShopItem) -> BuyResult {
+        guard item.supported else { return .update }
         guard !item.isSoon, let price = item.price else { return .unavailable }
         if owns(item.id), !item.isRepeat { return .owned }
         if let needed = item.requires, !owns(needed) { return .needs(needed) }
@@ -275,6 +316,7 @@ final class LabStore {
         var entry = progress.purchases[item.id] ?? LabPurchase(price: price, count: 0, date: LabStore.now)
         entry.count += 1
         entry.date = LabStore.now
+        if item.kind == "ticket" { entry.each = item.count }
         progress.purchases[item.id] = entry
         save()
         return .bought
@@ -350,6 +392,7 @@ final class LabStore {
     func reset() {
         progress = LabProgress()
         save()
+        HomeScenes.choose(nil)
     }
 
     #if DEBUG
@@ -369,6 +412,11 @@ final class LabStore {
         }
         if arguments.contains("--lab-greeted") || arguments.contains(where: { $0.hasPrefix("--lab-seed=") }) { progress.greeted = true; progress.legacyNoticed = true }
         if let extra = value("--lab-income").flatMap(Int.init) { progress.editions["test-income"] = extra }
+        // `--lab-own=<item>` owns a shop item, as if it had been bought (repeatable).
+        for argument in arguments where argument.hasPrefix("--lab-own=") {
+            let id = String(argument.dropFirst(10))
+            if progress.purchases[id] == nil { progress.purchases[id] = LabPurchase(price: 0, count: 1, date: LabStore.now) }
+        }
         // The tag course's own UI tests enter it from the library, as a learner who owns it.
         if arguments.contains("--study-ui-test"), progress.purchases[Self.tagCourse] == nil {
             progress.purchases[Self.tagCourse] = LabPurchase(price: 0, count: 1, date: LabStore.now)

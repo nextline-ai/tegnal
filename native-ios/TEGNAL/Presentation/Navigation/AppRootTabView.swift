@@ -35,6 +35,7 @@ public struct AppRootTabView: View {
             didSetup = true
             // The lab's records live in the image database and travel with it.
             LabStore.shared.attach(env.booru.database)
+            LabGoods.shared.attach(env.booru)
             setupApp()
         }
         // A sync or a restored backup may have brought lab records from another device.

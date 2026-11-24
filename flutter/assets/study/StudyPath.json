@@ -4884,9 +4884,9 @@
          "ja": "タグ名がわからないとき ②"
         },
         "body": {
-         "en": "Find a picture similar to what you want and look at its tags. In this app, “View as a Prompt” on a picture screen sorts that picture's tags into prompt order.",
-         "ko": "원하는 것과 비슷한 그림을 찾아 거기 붙은 태그를 봅니다. 이 앱에서는 그림 화면의 ‘프롬프트로 보기’가 그 그림의 태그를 프롬프트 순서로 정리해 줍니다.",
-         "ja": "ほしいものに近い絵を探して、そこに付いているタグを見ます。このアプリでは、絵の画面の「プロンプトとして見る」で、その絵のタグをプロンプトの順に整理してくれます。"
+         "en": "Find a picture similar to what you want and look at its tags. In this app, “Prompt Analyzer” on a picture screen sorts that picture's tags into prompt order.",
+         "ko": "원하는 것과 비슷한 그림을 찾아 거기 붙은 태그를 봅니다. 이 앱에서는 그림 화면의 ‘프롬프트 분석기’가 그 그림의 태그를 프롬프트 순서로 정리해 줍니다.",
+         "ja": "ほしいものに近い絵を探して、そこに付いているタグを見ます。このアプリでは、絵の画面の「プロンプトアナライザー」で、その絵のタグをプロンプトの順に整理してくれます。"
         },
         "symbol": "photo.badge.magnifyingglass",
         "pose": "wave"

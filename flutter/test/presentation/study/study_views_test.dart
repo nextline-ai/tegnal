@@ -1,19 +1,27 @@
+import 'dart:convert';
+
 import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tegnal/core/booru/booru_fixture_source.dart';
 import 'package:tegnal/core/booru/booru_models.dart';
+import 'package:tegnal/core/lab/lab_records.dart';
+import 'package:tegnal/core/lab/lab_shop.dart';
+import 'package:tegnal/core/lab/lab_store.dart';
 import 'package:tegnal/core/study/study_engine.dart';
+import 'package:tegnal/core/support/l10n.dart';
 import 'package:tegnal/core/study/study_models.dart';
 import 'package:tegnal/core/study/study_session.dart';
 import 'package:tegnal/core/study/study_store.dart';
 import 'package:tegnal/presentation/booru/booru_settings_views.dart';
 import 'package:tegnal/presentation/design/ios_controls.dart';
+import 'package:tegnal/presentation/study/prompt_analyzer.dart';
 import 'package:tegnal/presentation/study/study_home_view.dart';
 import 'package:tegnal/presentation/study/study_quiz_view.dart';
 import 'package:tegnal/presentation/study/study_tag_view.dart';
 import 'package:tegnal/presentation/study/study_widgets.dart';
 import 'package:tegnal/presentation/study_mode/study_kit.dart';
 
+import '../../support/lab_shop_fixtures.dart';
 import 'study_test_support.dart';
 
 Finder key(String name) => find.byKey(Key(name));
@@ -335,6 +343,38 @@ void main() {
 
       expect(find.text('Tags in This Picture'), findsOneWidget);
       expect(key('study.promptPractice'), findsOneWidget);
+    });
+
+    testWidgets('the prompt analyzer is sold for 보석 once 2D AI 배우기 is owned, then opens the picture as a prompt', (tester) async {
+      final harness = StudyHarness();
+      final lab = LabStore.shared..use(LabShop.decode(utf8.encode(fixtureShopJson)));
+      addTearDown(lab.reset);
+      lab.progress.editions['test-income'] = 1000;
+      await harness.pump(tester, PromptAnalyzerRow(booru: harness.booru, post: post(harness), tint: const Color(0xFF007AFF)));
+      expect(find.text(L10n.text('Prompt Analyzer')), findsOneWidget);
+      await tester.tap(key('booru.prompt'));
+      await tester.pumpAndSettle();
+      expect(key('lab.shop.see.course.tags'), findsOneWidget, reason: 'It needs 2D AI 배우기 first, which its page leads to');
+      expect(key('lab.shop.buy.feature.prompt-analyzer'), findsNothing);
+      await tester.tap(key('lab.shop.see.course.tags'));
+      await tester.pumpAndSettle();
+      expect(key('lab.shop.page.course.tags'), findsOneWidget, reason: 'The page turns to the course it needs');
+      Navigator.of(tester.element(key('lab.shop.page.course.tags'))).pop();
+      await tester.pumpAndSettle();
+
+      lab.progress.purchases[LabStore.tagCourse] = const LabPurchase(price: 0, count: 1, date: 0);
+      await tester.tap(key('booru.prompt'));
+      await tester.pumpAndSettle();
+      await tester.tap(key('lab.shop.buy.feature.prompt-analyzer'));
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pumpAndSettle();
+      expect(lab.unlocked(LabFeature.promptAnalyzer), isTrue);
+      expect(lab.balance, 800);
+      expect(key('lab.shop.bought'), findsOneWidget, reason: 'Bought on its page, with no second question');
+
+      await tester.tap(key('lab.shop.open.feature.prompt-analyzer'));
+      await tester.pumpAndSettle();
+      expect(key('study.prompt'), findsOneWidget, reason: 'Open turns the page into the analyzer');
     });
 
     testWidgets('remembers the format, and leaves out the artist switch when the picture has no artist', (tester) async {

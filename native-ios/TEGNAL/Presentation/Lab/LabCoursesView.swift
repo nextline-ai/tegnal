@@ -36,6 +36,7 @@ struct LabCoursesView: View {
         .scrollIndicators(.hidden)
         .toolbar(.hidden, for: .navigationBar)
         .labLines()
+        .task { await store.refreshShop() }
         .fileImporter(isPresented: $importing, allowedContentTypes: [.tegnalCourse, .json]) { result in
             guard case .success(let url) = result else { return }
             do {
@@ -105,7 +106,7 @@ struct LabCoursesView: View {
                 let features: [(String, String)] = [("rectangle.stack.fill", L10n.text("lab.courses.lab.cards", String(deck.episodes.count), String(deck.seasons.count)))]
                     + (deck.imported ? [] : [("doc.text.fill", L10n.text("lab.courses.lab.sheet"))])
                     + [("gauge.with.dots.needle.67percent", L10n.text("lab.courses.lab.rate", deck.info.gauge.text, "\(rate(deck))%"))]
-                card(kicker: L10n.text(deck.imported ? "lab.courses.imported.kicker" : "lab.courses.lab.kicker"), title: deck.title, current: here,
+                card(kicker: L10n.text(deck.official ? "lab.courses.official.kicker" : deck.imported ? "lab.courses.imported.kicker" : "lab.courses.lab.kicker"), title: deck.title, current: here,
                      fill: (deck.imported ? Color(labHex: colors.first ?? LabPalette.ink) : Color(labHex: "2C2C2E")).gradient, glow: .black.opacity(0.3),
                      features: features) { fan(colors) }
             }
@@ -198,7 +199,13 @@ struct LabCoursesView: View {
     /// The foot of a course not bought yet: what the learner has, what is missing and how it is earned, and the buy button.
     /// Nil for a course owned or free.
     private func purchase(_ course: LearningCourse, ink: Color) -> AnyView? {
-        guard !courses.owned(course), let item = course.item.flatMap(store.shop.item), let price = item.price else { return nil }
+        guard !courses.owned(course) else { return nil }
+        guard let item = course.item.flatMap(store.shop.item), let price = item.price else {
+            // The shop list is not here yet, or no longer sells the course.
+            let text = store.shopState == .loading ? "lab.shop.loading" : store.shopState == .newer ? "lab.shop.newer" : "lab.shop.failed"
+            return AnyView(Text(L10n.text(text)).font(.system(size: 13, weight: .semibold)).foregroundStyle(.white.opacity(0.85))
+                .frame(maxWidth: .infinity, alignment: .leading).fixedSize(horizontal: false, vertical: true))
+        }
         let state = store.canBuy(item)
         return AnyView(HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {

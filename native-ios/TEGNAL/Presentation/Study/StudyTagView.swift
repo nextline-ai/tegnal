@@ -295,8 +295,49 @@ struct StudyPromptView: View {
             }
         }
         .listStyle(.insetGrouped).tint(StudyStyle.accent)
-        .navigationTitle(L10n.text("Prompt")).navigationBarTitleDisplayMode(.inline)
+        .navigationTitle(L10n.text("Prompt Analyzer")).navigationBarTitleDisplayMode(.inline)
         .appFullScreenCover(item: $session, onDismiss: { board.reload(store) }) { StudyQuizView(session: $0, source: source) }
         .onAppear { board.reload(store) }
+    }
+}
+
+// MARK: - Prompt analyzer (sold in the lab's shop)
+
+/// The picture details' way into the prompt analyzer: the analyzer itself once its key is bought in the lab's shop
+/// (`feature.prompt-analyzer`, which needs 2D AI 배우기 first), else the analyzer's page in the shop, where it is bought.
+/// Both are pushed onto the details' own navigation, so no second sheet stacks on the details.
+struct PromptAnalyzerRow: View {
+    let post: BooruPost
+    let source: any BooruProviding
+    @State private var store = LabStore.shared
+
+    var body: some View {
+        let unlocked = store.unlocked(.promptAnalyzer)
+        NavigationLink { PromptAnalyzerDestination(post: post, source: source) } label: {
+            HStack {
+                Label(L10n.text("Prompt Analyzer"), systemImage: "text.viewfinder")
+                if !unlocked {
+                    Spacer()
+                    Image(systemName: "lock.fill").font(.footnote).foregroundStyle(.secondary)
+                }
+            }
+        }
+        .accessibilityIdentifier("booru.prompt")
+    }
+}
+
+/// What the row opens, decided when it is opened: the shop page stays on screen through its purchase (and its celebration)
+/// until "open" turns it into the analyzer.
+private struct PromptAnalyzerDestination: View {
+    let post: BooruPost
+    let source: any BooruProviding
+    @State private var buying = !LabStore.shared.unlocked(.promptAnalyzer)
+
+    var body: some View {
+        if buying {
+            LabShopItemSheet(itemID: LabFeature.promptAnalyzer.item, outside: true, pushed: true) { withAnimation(.snappy) { buying = false } }
+        } else {
+            StudyPromptView(post: post, source: source)
+        }
     }
 }

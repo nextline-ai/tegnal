@@ -3,4 +3,6 @@
     <!-- The home scene's dusk colour (`HomePalette.dusk`): behind the blurred still, and the
          whole system launch screen on Android 12 and later, which can only show a colour. -->
     <color name="home_dusk">#2A1E51</color>
+    <!-- The system launch screen and the launch cover: plain black, which every home scene fades in from. -->
+    <color name="launch_black">#000000</color>
 </resources>

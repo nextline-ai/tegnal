@@ -3,9 +3,12 @@ import 'package:flutter/foundation.dart';
 import '../study/study_path.dart';
 import '../study/study_store.dart';
 import '../support/sql_database.dart';
+import '../addons/addon_market.dart';
 import 'lab_course.dart';
+import 'lab_goods.dart';
 import 'lab_records.dart';
 import 'lab_sheet.dart';
+import 'lab_shop.dart';
 
 // The lab's progress and its money: one shared store, saved after every change. Ported from `LabStore.swift`.
 
@@ -61,6 +64,9 @@ class LabBuyResult {
   static const bought = LabBuyResult._('bought');
   static const owned = LabBuyResult._('owned');
   static const unavailable = LabBuyResult._('unavailable');
+
+  /// This app does not know the item; a newer one does.
+  static const update = LabBuyResult._('update');
   const LabBuyResult.shortBy(int amount) : this._('short', amount);
 
   /// Another item, by id, must be owned first.
@@ -77,13 +83,17 @@ class LabBuyResult {
   int get hashCode => Object.hash(kind, short, needed);
 }
 
+/// Where the shop list stands. [newer]: the server's list is for a later app.
+enum LabShopState { loading, ready, failed, newer }
+
 class LabStore extends ChangeNotifier {
   LabStore({LabCourse? course, LabShop? shop, LabDiagnosis? diagnosis, LabRecordStore? records, LabEdition? edition, bool useBundledDiagnosis = true})
-    // The bundled course, shop and sheet are read when the app starts; a store made before then still sees them.
+    // The bundled course and sheet are read when the app starts; a store made before then still sees them.
     // ignore: prefer_initializing_formals
     : _course = course,
-      // ignore: prefer_initializing_formals
-      _shop = shop,
+      // Until a list from the server is read, the goods the app carries are for sale.
+      _shop = shop ?? LabShop.builtIn,
+      shopState = shop == null ? LabShopState.loading : LabShopState.ready,
       _diagnosis = diagnosis,
       _useBundledDiagnosis = useBundledDiagnosis && diagnosis == null,
       _records = records ?? LabMemoryRecords(),
@@ -104,7 +114,11 @@ class LabStore extends ChangeNotifier {
   static const _arguments = String.fromEnvironment('TEGNAL_LAB');
 
   final LabCourse? _course;
-  final LabShop? _shop;
+
+  /// What the shop sells: the list last read from TEGNAL's server, or, until one is read, the few goods the app carries
+  /// ([LabShop.builtIn]: the 2D course and the prompt analyzer, so they can be bought offline).
+  LabShop _shop;
+  LabShopState shopState;
   final LabDiagnosis? _diagnosis;
   final bool _useBundledDiagnosis;
 
@@ -127,7 +141,36 @@ class LabStore extends ChangeNotifier {
   /// course's are put under its id, so two courses never meet.
   String key(String id) => keyIn(id, course);
   static String keyIn(String id, LabCourse course) => course.imported ? '${course.id}/$id' : id;
-  LabShop get shop => _shop ?? LabShop.bundled;
+  LabShop get shop => _shop;
+
+  /// True when the course on screen pays 보석: the AI lab, and the courses bought in the shop.
+  bool get pays => !course.imported || course.official;
+
+  /// Uses a list read elsewhere: the copy kept from last time, or one made in a test.
+  void use(LabShop shop) {
+    _shop = shop;
+    shopState = LabShopState.ready;
+    notifyListeners();
+  }
+
+  /// Reads the shop list from TEGNAL's server. A list that cannot be read keeps the last one; a list for a later app hides it.
+  Future<void> refreshShop({AddonMarket? market}) async {
+    try {
+      _shop = await LabShopSource.fetch(market: market);
+      shopState = LabShopState.ready;
+    } on LabShopError catch (error) {
+      if (error == LabShopError.newer) {
+        // An old list is not sold from once a newer one is out; the goods the app carries still are.
+        _shop = LabShop.builtIn;
+        shopState = LabShopState.newer;
+      } else if (shopState != LabShopState.ready) {
+        shopState = LabShopState.failed;
+      }
+    } on Object {
+      if (shopState != LabShopState.ready) shopState = LabShopState.failed;
+    }
+    notifyListeners();
+  }
   LabDiagnosis? get diagnosis => _diagnosis ?? (_useBundledDiagnosis ? LabDiagnosis.bundled : null);
 
   LabRecordStore _records;
@@ -215,7 +258,7 @@ class LabStore extends ChangeNotifier {
   LabEngraving engrave(LabEpisode episode, {required int failsHung}) {
     final before = rate;
     final first = !progress.cards.containsKey(key(episode.id));
-    final pays = !course.imported;
+    final pays = this.pays;
     if (first) {
       progress.cards[key(episode.id)] = now;
       if (pays) progress.cardGems[key(episode.id)] = episode.reward;
@@ -225,9 +268,9 @@ class LabStore extends ChangeNotifier {
     final season = course.seasonOf(episode);
     final finished = first && season != null && complete(season) ? season.number : null;
     var seasonReward = 0;
-    if (finished != null && pays && course.info.rewards.season > 0 && !progress.seasonGems.containsKey('$finished')) {
+    if (finished != null && pays && course.info.rewards.season > 0 && !progress.seasonGems.containsKey(key('$finished'))) {
       seasonReward = course.info.rewards.season;
-      progress.seasonGems['$finished'] = seasonReward;
+      progress.seasonGems[key('$finished')] = seasonReward;
       _save();
     }
     return LabEngraving(
@@ -248,7 +291,7 @@ class LabStore extends ChangeNotifier {
   bool hung(LabFail fail) => progress.fails.containsKey(key(fail.id));
 
   /// What hanging one 망작 pays in the course on screen: nothing in an imported course.
-  int get failReward => course.imported ? 0 : course.info.rewards.fail;
+  int get failReward => pays ? course.info.rewards.fail : 0;
 
   /// Hangs a 망작 in the gallery. True the first time, when it also pays.
   bool hang(LabFail fail) {
@@ -315,7 +358,10 @@ class LabStore extends ChangeNotifier {
         .fold(0, (total, season) => total + (progress.seasonGems['${season.number}'] ?? main.info.rewards.season));
     final editions = progress.editions.values.fold(0, (total, value) => total + value);
     final courses = progress.coursePaid.values.fold(0, (total, value) => total + value);
-    return cards + fails + seasons + editions + courses;
+    // The courses bought in the shop keep theirs under `<course>/…`; an imported course's records there never hold an amount.
+    int namespaced(Map<String, int> paid) => paid.entries.where((entry) => entry.key.contains('/')).fold(0, (total, entry) => total + entry.value);
+    final official = namespaced(progress.cardGems) + namespaced(progress.failGems) + namespaced(progress.seasonGems);
+    return cards + fails + seasons + editions + courses + official;
   }
 
   int get spent => progress.purchases.values.fold(0, (total, purchase) => total + purchase.price * purchase.count);
@@ -324,7 +370,14 @@ class LabStore extends ChangeNotifier {
   bool owns(String id) => (progress.purchases[id]?.count ?? 0) > 0;
   bool get ownsTagCourse => owns(tagCourse);
 
+  /// True once the feature's key was bought (`feature.<id>`). Needs no shop list: the record says it.
+  bool unlocked(LabFeature feature) => owns(feature.item);
+
+  /// Tickets bought. Nothing spends them yet: drawing with them needs TEGNAL's own generation server (`docs/features/live-shop.md` §5).
+  int get tickets => progress.purchases.values.fold(0, (total, purchase) => total + purchase.count * (purchase.each ?? 0));
+
   LabBuyResult canBuy(LabShopItem item) {
+    if (!item.supported) return LabBuyResult.update;
     final price = item.price;
     if (item.isSoon || price == null) return LabBuyResult.unavailable;
     if (owns(item.id) && !item.isRepeat) return LabBuyResult.owned;
@@ -338,7 +391,7 @@ class LabStore extends ChangeNotifier {
     final price = item.price;
     if (!result.isBought || price == null) return result;
     final entry = progress.purchases[item.id] ?? LabPurchase(price: price, count: 0, date: now);
-    progress.purchases[item.id] = entry.copyWith(count: entry.count + 1, date: now);
+    progress.purchases[item.id] = entry.copyWith(count: entry.count + 1, date: now, each: item.kind == 'ticket' ? item.count : null);
     _save();
     return LabBuyResult.bought;
   }
@@ -425,6 +478,7 @@ class LabStore extends ChangeNotifier {
   void reset() {
     progress = LabProgress();
     _save();
+    HomeScenes.choose(null);
   }
 
   void _applyTestArguments(List<String> arguments) {
@@ -450,6 +504,10 @@ class LabStore extends ChangeNotifier {
     }
     final income = int.tryParse(value('income') ?? '');
     if (income != null) progress.editions['test-income'] = income;
+    // `own=<item>` owns a shop item, as if it had been bought (`own=a+b` for several).
+    for (final id in (value('own') ?? '').split('+').where((id) => id.isNotEmpty)) {
+      progress.purchases.putIfAbsent(id, () => LabPurchase(price: 0, count: 1, date: now));
+    }
     if (arguments.contains('owned')) {
       progress.purchases.putIfAbsent(tagCourse, () => LabPurchase(price: 0, count: 1, date: now));
       progress.legacyNoticed = true;

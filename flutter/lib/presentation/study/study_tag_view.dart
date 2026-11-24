@@ -553,7 +553,7 @@ class _StudyPromptViewState extends State<StudyPromptView> {
       StudyPromptStyle.natural => 'Headcount first, then characters and series, then what the picture shows. File and translation tags are left out.',
     };
     return StudyPage(
-      title: L10n.text('Prompt'),
+      title: L10n.text('Prompt Analyzer'),
       children: [
         const SizedBox(height: 25),
         FormSection(

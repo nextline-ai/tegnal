@@ -9,7 +9,7 @@ import '../support/sql_database.dart';
 ///
 /// Keys: `card:<episode>` and `fail:<id>` (engraved, hung; value = 보석 paid, or 1 when it paid nothing or was written before
 /// amounts were kept), `season:<number>`, `edition:<id>`, `lesson:<course>/<lesson>`, `stars:<course>/<lesson>` and
-/// `section:<course>/<section>` (value = 보석 paid), `purchase:<item>` (value = count, text = `{"price":…}`), and `state:type` (text = type id), `state:greeted`,
+/// `section:<course>/<section>` (value = 보석 paid), `purchase:<item>` (value = count, text = `{"price":…}`, plus `"each"` tickets for ticket goods), and `state:type` (text = type id), `state:greeted`,
 /// `state:legacyNoticed`, `state:seenEdition` (text). Merging two devices keeps the larger value and the earlier time.
 class LabRecord {
   const LabRecord({required this.key, required this.value, this.text, required this.at});
@@ -82,7 +82,7 @@ class LabMemoryRecords implements LabRecordStore {
 
 /// What was bought.
 class LabPurchase {
-  const LabPurchase({required this.price, required this.count, required this.date});
+  const LabPurchase({required this.price, required this.count, required this.date, this.each});
 
   /// What it cost, so a later price change does not move the balance.
   final int price;
@@ -91,15 +91,19 @@ class LabPurchase {
   /// Seconds since 1970.
   final double date;
 
-  LabPurchase copyWith({int? count, double? date}) => LabPurchase(price: price, count: count ?? this.count, date: date ?? this.date);
+  /// Tickets each purchase brought, for ticket goods.
+  final int? each;
+
+  LabPurchase copyWith({int? count, double? date, int? each}) =>
+      LabPurchase(price: price, count: count ?? this.count, date: date ?? this.date, each: each ?? this.each);
 
   /// The record's text, written the same way by both apps.
-  String get detail => '{"price":$price}';
+  String get detail => each == null ? '{"price":$price}' : '{"price":$price,"each":$each}';
 
   @override
-  bool operator ==(Object other) => other is LabPurchase && other.price == price && other.count == count && other.date == date;
+  bool operator ==(Object other) => other is LabPurchase && other.price == price && other.count == count && other.date == date && other.each == each;
   @override
-  int get hashCode => Object.hash(price, count, date);
+  int get hashCode => Object.hash(price, count, date, each);
 }
 
 /// Everything a learner has done in the lab, read from and written to its records. Times are seconds since 1970.
@@ -172,7 +176,12 @@ class LabProgress {
           } on Object {
             detail = null;
           }
-          progress.purchases[id] = LabPurchase(price: (detail?['price'] as num?)?.toInt() ?? 0, count: record.value, date: record.at);
+          progress.purchases[id] = LabPurchase(
+            price: (detail?['price'] as num?)?.toInt() ?? 0,
+            count: record.value,
+            date: record.at,
+            each: (detail?['each'] as num?)?.toInt(),
+          );
         case 'state':
           switch (id) {
             case 'type':

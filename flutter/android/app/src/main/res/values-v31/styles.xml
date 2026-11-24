@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Android 12 and later always show a system launch screen. It can only show a colour, so it
-         shows no icon and the home scene's dusk colour the blurred still then fades in over. -->
+    <!-- Android 12 and later always show a system launch screen. It shows plain black and no icon
+         (user, 2026-11-24), which every home scene then fades in from. -->
     <style name="LaunchTheme" parent="@android:style/Theme.Black.NoTitleBar">
         <item name="android:windowBackground">@drawable/launch_background</item>
-        <item name="android:windowSplashScreenBackground">@color/home_dusk</item>
+        <item name="android:windowSplashScreenBackground">@color/launch_black</item>
         <item name="android:windowSplashScreenAnimatedIcon">@drawable/launch_icon_none</item>
         <item name="android:windowSplashScreenAnimationDuration">0</item>
     </style>

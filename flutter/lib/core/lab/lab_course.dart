@@ -52,7 +52,7 @@ String _string(Object? json) => json is String ? json : throw FormatException('E
 /// A deck course: its seasons and the episodes in them. The AI lab is the bundled one (`assets/lab/`); others are
 /// imported from one-file course files (`LabCourseFile`) and play on the same deck.
 class LabCourse {
-  const LabCourse({required this.info, required this.episodes, this.imported = false});
+  const LabCourse({required this.info, required this.episodes, this.imported = false, this.official = false});
 
   final LabCourseInfo info;
   final List<LabEpisode> episodes;
@@ -60,6 +60,11 @@ class LabCourse {
   /// Imported by the learner from a course file. Such a course pays no 보석, has no cheat sheet or diagnosis of its own,
   /// and keeps its records under its own id (`LabStore.key`).
   final bool imported;
+
+  /// Sold in the shop and downloaded from TEGNAL (`LabGoods`): kept under its own id like an imported course, but it pays 보석.
+  final bool official;
+
+  LabCourse asOfficial() => LabCourse(info: info, episodes: episodes, imported: imported, official: true);
 
   String get id => info.id;
 
