@@ -20,6 +20,7 @@ import '../core/support/mode_settings.dart';
 import '../core/taste/taste_controller.dart';
 import '../core/sync/library_drive_sync.dart';
 import '../core/storage/app_database.dart';
+import '../core/lab/lab_sheet_alerts.dart';
 import '../core/support/l10n.dart';
 import '../core/support/preferences.dart';
 import '../core/taste/taste_models.dart';
@@ -340,8 +341,10 @@ class _RootState extends State<_Root> {
         if (!services.isTesting) unawaited(services.booruAccounts.setActive(active && _stage.libraryWarm));
         // The automatic backup every few days, also when the app comes back after days in the background.
         if (!services.isTesting && active) unawaited(services.backups.backUpIfDue());
+        if (!services.isTesting && active) unawaited(_openFromSheetAlert());
       },
     );
+    if (!services.isTesting) unawaited(_startSheetAlerts());
     _libraryWarm = _stage.libraryWarm;
     _libraryOpened = _stage.libraryOpened;
     _stage.addListener(_stageChanged);
@@ -379,6 +382,17 @@ class _RootState extends State<_Root> {
   /// Shows onboarding once, at a new user's first launch, after the home scene's opening blur, as on iOS.
   /// Someone who already has a website or an image server (an update from a version without onboarding)
   /// is counted as done. Fixture runs show it only when `onboarding` names it.
+  /// With cheat-sheet alerts on, the job is handed this launch's words (the language may have changed).
+  Future<void> _startSheetAlerts() async {
+    if (await LabSheetAlerts.isOn()) await LabSheetAlerts.configure();
+    await _openFromSheetAlert();
+  }
+
+  /// A tapped cheat-sheet alert opens the lab on the sheet.
+  Future<void> _openFromSheetAlert() async {
+    if (await LabSheetAlerts.takeOpen() && mounted) StudyMode.shared.enterLab(LabTab.sheet);
+  }
+
   void _watchFirstRun() {
     final content = services.content;
     if (services.isTesting) {

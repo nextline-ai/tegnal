@@ -2096,7 +2096,7 @@
 /* Learning mode */
 "Practice" = "れんしゅう";
 "Collection" = "図鑑";
-"Studio" = "実践";
+"Studio" = "ジェネレーター";
 "Me" = "じぶん";
 "Back to the Library" = "ライブラリに戻る";
 "Today's goal" = "今日の目標";
@@ -2174,7 +2174,7 @@
 "Open the Generator" = "ジェネレーターを開く";
 "Connect an API Key First" = "まずAPIキーを接続しましょう";
 "You can generate pictures. Each one is paid for with Buzz from your Civitai account." = "画像を生成できます。1枚ごとにCivitaiアカウントのBuzzを使います。";
-"Pictures are drawn on Civitai's servers, so the Studio needs your own Civitai API key." = "画像はCivitaiのサーバーが描きます。そのため実践には自分のCivitai APIキーが必要です。";
+"Pictures are drawn on Civitai's servers, so the Studio needs your own Civitai API key." = "画像はCivitaiのサーバーが描きます。そのためジェネレーターには自分のCivitai APIキーが必要です。";
 "Learn What an API Key Is" = "APIキーとは何かを学ぶ";
 "Sound Effects" = "効果音";
 "Viewing Mode" = "鑑賞モード";
@@ -2228,7 +2228,14 @@
 "Generate your first picture." = "最初の画像を生成する";
 "Advanced Unlocked" = "詳細設定を解放";
 "Generate 3 pictures. This opens the generator's advanced settings." = "画像を3枚生成する。ジェネレーターの詳細設定が開きます。";
-"Studio Regular" = "実践の常連";
+"Studio Regular" = "ジェネレーターの常連";
+"studio.empty.title" = "まだ描いた画像がありません";
+"studio.empty.detail" = "プロンプトを書いてモデルを選び、「生成」を押してみましょう。描き上がった画像がここに大きく表示されます。";
+"studio.placeholder" = "描きたいものをタグで書いてみましょう。例: 1girl, smile, cherry blossoms";
+"studio.presets" = "おすすめタグ";
+"studio.all" = "すべて表示";
+"studio.more" = "すべての設定";
+"studio.more.detail" = "サイズ、ステップ、LoRA、避けたいものまで";
 "Generate 10 pictures." = "画像を10枚生成する";
 "Prolific" = "多作家";
 "Generate 50 pictures." = "画像を50枚生成する";
@@ -2622,6 +2629,12 @@
 "lab.sheet.draftNote" = "まだ決まっていない下書きです。";
 "lab.sheet.copy" = "プロンプトをコピー";
 "lab.sheet.copied" = "コピーしました";
+"lab.sheet.alerts" = "新版のお知らせ";
+"lab.sheet.alerts.detail" = "チートシートが更新されたら通知でお知らせします。";
+"lab.sheet.alerts.blocked" = "TEGNALの通知がオフになっています。設定で通知を許可してください。";
+"lab.sheet.alerts.settings" = "通知設定を開く";
+"lab.sheet.alert.title" = "新しいチートシートが出ました";
+"lab.sheet.alert.body" = "%@ 時点で新しくまとめました。タップして確認しましょう。";
 "lab.shop.limited" = "数量限定";
 "lab.shop.owned" = "所持中";
 "lab.shop.ownedShort" = "所持";

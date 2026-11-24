@@ -568,79 +568,309 @@ struct StudyDexView: View {
     }
 }
 
-// MARK: - Studio
+// MARK: - Generator
 
+/// The 생성기 tab: the picture generator itself, not a menu that leads to it. Read top to bottom it is one tool: the canvas
+/// with the last picture drawn, the prompt, the model, the button that draws, then what was drawn before. Without an API key
+/// a card above everything says so and leads to the lessons about it. Every setting beyond prompt and model, and the
+/// beginner lock on them, stays in the full generator (`GeneratorView`), one row away.
 struct StudyLabView: View {
-    private enum Tool: String, Identifiable { case guide, generator, key; var id: String { rawValue } }
+    private enum Tool: String, Identifiable { case guide, generator, key, model, gallery; var id: String { rawValue } }
     let model: StudyModeModel
     let start: (StudyLessonPlan) -> Void
-    /// Called when a tool closes: a picture generated in it may have earned a badge.
+    /// Called when a picture is made or a tool closes: a picture may have earned a badge.
     var closed: () -> Void = {}
+    @Environment(BooruStore.self) private var library
     @State private var opened: Tool?
+    @State private var picture: GeneratedPicture?
     @State private var generation = GenerationStore.shared
+    @State private var run = GenerationRun()
+    @State private var estimate: Double?
+    @FocusState private var writing: Bool
+    /// The prompt being written stays when the tab or the app is left.
+    @SwiftUI.AppStorage("generation.tabPrompt", store: ReaderPreferences.booruDefaults) private var prompt = ""
+
+    private var settings: GenerationSettings { generation.settings }
+    private var trimmed: String { prompt.trimmingCharacters(in: .whitespacesAndNewlines) }
+    /// Safe Mode never asks for mature results, whatever the full generator's switch says.
+    private var sent: GenerationSettings { var value = settings; if library.safeMode { value.mature = false }; return value }
+    private var priced: [String] {
+        [settings.model?.air ?? "", "\(settings.width)x\(settings.height)", String(settings.steps), String(settings.quantity), String(sent.mature), String(generation.hasKey)]
+            + settings.loras.map { $0.model.air }
+    }
+    /// The picture on the canvas: the newest one made here, else the newest one kept.
+    private var shown: GeneratedPicture? { run.made.first ?? generation.pictures.first }
 
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
-                connection
-                tool(.generator, "wand.and.stars", "Generate a Picture", "Try a prompt with your own Civitai API key.")
-                tool(.guide, "text.book.closed.fill", "Writing Prompts", "Emphasis, quality tags and what each model recommends.")
+                if !generation.hasKey { connection }
+                canvas
+                promptCard
+                modelRow
+                drawButton
+                if !generation.pictures.isEmpty { recent }
+                more
             }
-            .padding(.horizontal, 16).padding(.top, 8).frame(maxWidth: 560).frame(maxWidth: .infinity)
+            .padding(.horizontal, 16).padding(.top, 8).padding(.bottom, 24).frame(maxWidth: 560).frame(maxWidth: .infinity)
         }
+        .scrollDismissesKeyboard(.interactively)
         .appSheet(item: $opened, onDismiss: closed) { tool in
             NavigationStack {
                 switch tool {
                 case .key: GeneratorAccountView()
-                case .guide: StudyGuideView().toolbar { ToolbarItem(placement: .cancellationAction) { Button(L10n.text("Close")) { opened = nil } } }
-                case .generator: GeneratorView().toolbar { ToolbarItem(placement: .cancellationAction) { Button(L10n.text("Close")) { opened = nil } } }
+                case .guide: StudyGuideView().toolbar { close }
+                case .generator: GeneratorView(prompt: prompt).toolbar { close }
+                case .model: GeneratorModelPicker(kind: .checkpoint) { generation.settings.use($0); opened = nil }.toolbar { close }
+                case .gallery: GeneratedGalleryView().toolbar { close }
                 }
             }
         }
+        .appSheet(item: $picture) { picture in NavigationStack { GeneratedPictureView(picture: picture) { run.forget(picture) } } }
+        .onChange(of: run.made.count) { old, new in
+            guard new > old else { return }
+            try? library.studyStore.raise(StudyCounter.pictures, to: generation.pictures.count)
+            StudySound.tap.play()
+            closed()
+        }
+        .task(id: priced) {
+            estimate = nil
+            guard generation.hasKey, settings.model != nil, !trimmed.isEmpty else { return }
+            try? await Task.sleep(for: .milliseconds(900))
+            guard !Task.isCancelled else { return }
+            estimate = try? await generation.client().estimate(prompt: trimmed, settings: sent)
+        }
+    }
+
+    private var close: some ToolbarContent {
+        ToolbarItem(placement: .cancellationAction) { Button(L10n.text("Close")) { opened = nil } }
     }
 
     /// Generating needs an API key. Until one is saved, this card says so and leads to the lessons that explain it.
     private var connection: some View {
-        let connected = generation.hasKey
         let lesson = StudyPath.bundled.lessons.first { $0.id == "api-what" }
         return StudyCard {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 14) {
-                    StudyMascot(pose: connected ? .cheer : .wave, size: 84)
+                    StudyMascot(pose: .wave, size: 72)
                     VStack(alignment: .leading, spacing: 4) {
-                        Label(L10n.text(connected ? "API Key Connected" : "Connect an API Key First"), systemImage: connected ? "checkmark.seal.fill" : "key.fill")
-                            .font(StudyTheme.title(19)).foregroundStyle(connected ? StudyTheme.good : StudyTheme.ink)
-                        Text(L10n.text(connected ? "You can generate pictures. Each one is paid for with Buzz from your Civitai account." : "Pictures are drawn on Civitai's servers, so the Studio needs your own Civitai API key."))
+                        Label(L10n.text("Connect an API Key First"), systemImage: "key.fill")
+                            .font(StudyTheme.title(19)).foregroundStyle(StudyTheme.ink)
+                        Text(L10n.text("Pictures are drawn on Civitai's servers, so the Studio needs your own Civitai API key."))
                             .font(StudyTheme.body(14, .medium)).foregroundStyle(StudyTheme.muted)
                     }
                 }
-                if !connected {
-                    if let lesson {
-                        StudyMainButton(title: L10n.text("Learn What an API Key Is"), symbol: "graduationcap.fill") { StudySound.tap.play(); start(.lesson(lesson)) }
-                            .accessibilityIdentifier("study.lab.learn")
+                if let lesson {
+                    StudyMainButton(title: L10n.text("Learn What an API Key Is"), symbol: "graduationcap.fill") { StudySound.tap.play(); start(.lesson(lesson)) }
+                        .accessibilityIdentifier("study.lab.learn")
+                }
+                StudyMainButton(title: L10n.text("Enter the API Key"), color: StudyTheme.gold, symbol: "key.fill") { StudySound.tap.play(); opened = .key }
+                    .accessibilityIdentifier("study.lab.key")
+            }
+        }
+    }
+
+    /// The last picture, large. While drawing it shows what the service is doing; before the first picture, what to do.
+    private var canvas: some View {
+        let ratio = shown.map { CGFloat(max($0.width, 1)) / CGFloat(max($0.height, 1)) } ?? 1
+        return ZStack {
+            RoundedRectangle(cornerRadius: 22, style: .continuous).fill(StudyTheme.sunken)
+            if let shown, let image = UIImage(contentsOfFile: generation.url(shown).path) {
+                Button { picture = shown } label: {
+                    Image(uiImage: image).resizable().scaledToFit()
+                        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(L10n.text("Generated Picture")).accessibilityIdentifier("generator.result")
+                .id(shown.id)
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
+            } else if !run.isRunning {
+                VStack(spacing: 10) {
+                    StudyMascot(pose: .read, size: 96)
+                    Text(L10n.text("studio.empty.title")).font(StudyTheme.body(18, .heavy)).foregroundStyle(StudyTheme.ink)
+                    Text(L10n.text("studio.empty.detail")).font(StudyTheme.body(14, .medium)).foregroundStyle(StudyTheme.muted)
+                        .multilineTextAlignment(.center)
+                }
+                .padding(24)
+            }
+            if run.isRunning {
+                VStack(spacing: 12) {
+                    ProgressView().controlSize(.large).tint(.white)
+                    Text(status).font(StudyTheme.body(16, .heavy)).foregroundStyle(.white)
+                    Button(L10n.text("Cancel")) { run.cancel(store: generation) }
+                        .font(StudyTheme.body(14, .bold)).foregroundStyle(.white.opacity(0.85))
+                        .accessibilityIdentifier("generator.cancel")
+                }
+                .padding(.horizontal, 28).padding(.vertical, 20)
+                .background(.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .transition(.opacity)
+            }
+        }
+        .aspectRatio(min(max(ratio, 0.6), 1.6), contentMode: .fit)
+        .frame(maxHeight: 460)
+        .overlay { RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(StudyTheme.line, lineWidth: 2) }
+        .animation(.snappy, value: shown?.id)
+        .animation(.snappy, value: run.isRunning)
+    }
+
+    private var promptCard: some View {
+        StudyCard(padding: 14) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text(L10n.text("Prompt")).font(StudyTheme.body(14, .heavy)).foregroundStyle(StudyTheme.muted)
+                TextEditor(text: $prompt)
+                    .font(.callout.monospaced()).foregroundStyle(StudyTheme.ink)
+                    .scrollContentBackground(.hidden).frame(minHeight: 96)
+                    .textInputAutocapitalization(.never).autocorrectionDisabled()
+                    .focused($writing)
+                    .accessibilityLabel(L10n.text("Prompt"))
+                    .accessibilityIdentifier("generator.prompt")
+                    .overlay(alignment: .topLeading) {
+                        if prompt.isEmpty {
+                            Text(L10n.text("studio.placeholder")).font(.callout.monospaced()).foregroundStyle(StudyTheme.muted.opacity(0.7))
+                                .padding(.top, 8).padding(.leading, 5).allowsHitTesting(false).accessibilityHidden(true)
+                        }
                     }
-                    StudyMainButton(title: L10n.text("Enter the API Key"), color: StudyTheme.gold, symbol: "key.fill") { StudySound.tap.play(); opened = .key }
-                        .accessibilityIdentifier("study.lab.key")
+                HStack(spacing: 8) {
+                    Menu {
+                        ForEach(GenerationPreset.all) { preset in
+                            Button(preset.name) {
+                                prompt = preset.applied(to: prompt)
+                                generation.settings.negative = preset.negative; generation.settings.steps = preset.steps; generation.settings.guidance = preset.guidance
+                            }
+                        }
+                    } label: { chip("sparkles", L10n.text("studio.presets")) }
+                        .accessibilityIdentifier("generator.preset")
+                    Button { StudySound.tap.play(); opened = .guide } label: { chip("text.book.closed.fill", L10n.text("Writing Prompts")) }
+                        .buttonStyle(.plain).accessibilityIdentifier("study.lab.guide")
+                    Spacer(minLength: 0)
                 }
             }
         }
     }
 
-    private func tool(_ tool: Tool, _ symbol: String, _ title: String, _ detail: String) -> some View {
-        Button { StudySound.tap.play(); opened = tool } label: {
-            HStack(spacing: 14) {
-                Image(systemName: symbol).font(.system(size: 22, weight: .bold)).foregroundStyle(StudyTheme.primary)
-                    .frame(width: 52, height: 52).background(StudyTheme.primary.opacity(0.14), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(L10n.text(title)).font(StudyTheme.body(18, .heavy))
-                    Text(L10n.text(detail)).font(StudyTheme.body(13, .medium)).foregroundStyle(StudyTheme.muted).multilineTextAlignment(.leading)
+    private func chip(_ symbol: String, _ title: String) -> some View {
+        Label(title, systemImage: symbol).font(StudyTheme.body(13, .heavy)).foregroundStyle(StudyTheme.primary).lineLimit(1)
+            .padding(.horizontal, 12).padding(.vertical, 8)
+            .background(StudyTheme.primary.opacity(0.12), in: Capsule())
+            .fixedSize()
+    }
+
+    private var modelRow: some View {
+        Button { StudySound.tap.play(); opened = .model } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "cube.fill").font(.system(size: 18, weight: .bold)).foregroundStyle(StudyTheme.primary)
+                    .frame(width: 40, height: 40).background(StudyTheme.primary.opacity(0.14), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(L10n.text("Model")).font(StudyTheme.body(12, .heavy)).foregroundStyle(StudyTheme.muted)
+                    Text(settings.model?.name ?? L10n.text("Choose a Model")).font(StudyTheme.body(16, .heavy))
+                        .foregroundStyle(settings.model == nil ? StudyTheme.primary : StudyTheme.ink).lineLimit(1)
                 }
                 Spacer(minLength: 4)
                 Image(systemName: "chevron.right").font(.system(size: 14, weight: .heavy)).foregroundStyle(StudyTheme.muted)
-            }.padding(16)
+            }.padding(12)
         }
-        .buttonStyle(StudyPressStyle(radius: 20, outlined: true))
-        .accessibilityIdentifier("study.lab.\(tool.rawValue)")
+        .buttonStyle(StudyPressStyle(radius: 18, depth: 4, outlined: true))
+        .accessibilityIdentifier("generator.model")
+    }
+
+    private var drawButton: some View {
+        VStack(spacing: 8) {
+            Button(action: generate) {
+                HStack(spacing: 8) {
+                    Image(systemName: "wand.and.stars")
+                    Text(L10n.text("Generate"))
+                    if generation.hasKey, settings.model != nil, !trimmed.isEmpty {
+                        Text("· " + L10n.text("About %@ Buzz", String(Int((estimate ?? Double(settings.roughCost)).rounded(.up))))).opacity(0.85)
+                    }
+                }
+                .font(StudyTheme.body(18, .heavy)).frame(maxWidth: .infinity).padding(.vertical, 15)
+            }
+            .buttonStyle(StudyPressStyle())
+            .disabled(run.isRunning || trimmed.isEmpty)
+            .accessibilityIdentifier("generator.generate")
+            if let error = run.error {
+                Label(error.message, systemImage: "exclamationmark.triangle.fill").font(StudyTheme.body(14, .semibold)).foregroundStyle(StudyTheme.bad)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("generator.error")
+            } else if let spent = run.lastCost, !run.isRunning {
+                Text(L10n.text("The last request cost %@ Buzz.", String(Int(spent.rounded(.up))))).font(StudyTheme.body(13, .medium)).foregroundStyle(StudyTheme.muted)
+            }
+        }
+    }
+
+    /// What was drawn before, newest first, a tap from the picture and its settings.
+    private var recent: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(L10n.text("Generated Pictures")).font(StudyTheme.body(17, .heavy)).foregroundStyle(StudyTheme.ink)
+                Text(String(generation.pictures.count)).font(StudyTheme.body(14, .heavy)).foregroundStyle(StudyTheme.muted).monospacedDigit()
+                Spacer()
+                Button(L10n.text("studio.all")) { opened = .gallery }
+                    .font(StudyTheme.body(14, .heavy)).foregroundStyle(StudyTheme.primary)
+                    .accessibilityIdentifier("generator.gallery")
+            }
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(spacing: 10) {
+                    ForEach(generation.pictures.prefix(12)) { item in
+                        Button { picture = item } label: {
+                            StudyLabThumbnail(url: generation.url(item))
+                                .frame(width: 96, height: 96)
+                                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                                .overlay { RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(StudyTheme.line, lineWidth: 1.5) }
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(L10n.text("Generated Picture")).accessibilityIdentifier("generator.recent")
+                    }
+                }
+            }
+        }
+    }
+
+    /// Size, steps, LoRAs, things to avoid: the full generator, with the prompt written here.
+    private var more: some View {
+        Button { StudySound.tap.play(); opened = .generator } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "slider.horizontal.3").font(.system(size: 17, weight: .bold)).foregroundStyle(StudyTheme.muted)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(L10n.text("studio.more")).font(StudyTheme.body(15, .heavy)).foregroundStyle(StudyTheme.ink)
+                    Text(L10n.text("studio.more.detail")).font(StudyTheme.body(12, .medium)).foregroundStyle(StudyTheme.muted)
+                }
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.right").font(.system(size: 13, weight: .heavy)).foregroundStyle(StudyTheme.muted)
+            }.padding(12)
+        }
+        .buttonStyle(StudyPressStyle(radius: 16, depth: 3, outlined: true))
+        .accessibilityIdentifier("study.lab.generator")
+    }
+
+    private var status: String {
+        switch run.phase {
+        case .queued: L10n.text("Waiting in Line…")
+        case .drawing: L10n.text("Drawing…")
+        case .saving: L10n.text("Saving…")
+        default: L10n.text("Sending…")
+        }
+    }
+
+    private func generate() {
+        writing = false
+        guard generation.hasKey else { opened = .key; return }
+        guard settings.model != nil else { opened = .model; return }
+        StudySound.tap.play()
+        run.start(prompt: trimmed, settings: sent, store: generation)
+    }
+}
+
+/// A kept picture, read off the main thread so the row of them scrolls smoothly.
+private struct StudyLabThumbnail: View {
+    let url: URL
+    @State private var image: UIImage?
+    var body: some View {
+        StudyTheme.sunken
+            .overlay { if let image { Image(uiImage: image).resizable().scaledToFill() } }
+            .task(id: url) {
+                image = await Task.detached(priority: .userInitiated) { UIImage(contentsOfFile: url.path)?.preparingThumbnail(of: CGSize(width: 240, height: 240)) }.value
+            }
     }
 }
 

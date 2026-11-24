@@ -2096,7 +2096,7 @@
 /* Learning mode */
 "Practice" = "Practice";
 "Collection" = "Collection";
-"Studio" = "Studio";
+"Studio" = "Generator";
 "Me" = "Me";
 "Back to the Library" = "Back to the Library";
 "Today's goal" = "Today's goal";
@@ -2174,7 +2174,7 @@
 "Open the Generator" = "Open the Generator";
 "Connect an API Key First" = "Connect an API Key First";
 "You can generate pictures. Each one is paid for with Buzz from your Civitai account." = "You can generate pictures. Each one is paid for with Buzz from your Civitai account.";
-"Pictures are drawn on Civitai's servers, so the Studio needs your own Civitai API key." = "Pictures are drawn on Civitai's servers, so the Studio needs your own Civitai API key.";
+"Pictures are drawn on Civitai's servers, so the Studio needs your own Civitai API key." = "Pictures are drawn on Civitai's servers, so the Generator needs your own Civitai API key.";
 "Learn What an API Key Is" = "Learn What an API Key Is";
 "Sound Effects" = "Sound Effects";
 "Viewing Mode" = "Viewing Mode";
@@ -2228,7 +2228,14 @@
 "Generate your first picture." = "Generate your first picture.";
 "Advanced Unlocked" = "Advanced Unlocked";
 "Generate 3 pictures. This opens the generator's advanced settings." = "Generate 3 pictures. This opens the generator's advanced settings.";
-"Studio Regular" = "Studio Regular";
+"Studio Regular" = "Generator Regular";
+"studio.empty.title" = "Nothing drawn yet";
+"studio.empty.detail" = "Write a prompt, choose a model and press Generate. The finished picture appears here, large.";
+"studio.placeholder" = "Write what to draw as tags, e.g. 1girl, smile, cherry blossoms";
+"studio.presets" = "Recommended Tags";
+"studio.all" = "See All";
+"studio.more" = "All Settings";
+"studio.more.detail" = "Size, steps, LoRAs and things to avoid";
 "Generate 10 pictures." = "Generate 10 pictures.";
 "Prolific" = "Prolific";
 "Generate 50 pictures." = "Generate 50 pictures.";
@@ -2622,6 +2629,12 @@
 "lab.sheet.draftNote" = "A draft, not settled yet.";
 "lab.sheet.copy" = "Copy Prompt";
 "lab.sheet.copied" = "Copied";
+"lab.sheet.alerts" = "New Edition Alerts";
+"lab.sheet.alerts.detail" = "Get a notification when the cheat sheet is updated.";
+"lab.sheet.alerts.blocked" = "Notifications are off for TEGNAL. Allow them in Settings.";
+"lab.sheet.alerts.settings" = "Open Notification Settings";
+"lab.sheet.alert.title" = "A New Cheat Sheet Is Out";
+"lab.sheet.alert.body" = "Freshly curated as of %@. Tap to take a look.";
 "lab.shop.limited" = "Limited";
 "lab.shop.owned" = "Owned";
 "lab.shop.ownedShort" = "Owned";

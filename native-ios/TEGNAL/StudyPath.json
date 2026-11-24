@@ -1602,9 +1602,9 @@
          "ja": "ローカルモデルも借りて使えます"
         },
         "body": {
-         "en": "A local model does not have to run on your own computer. If you rent a server from a place like Civitai, you can use it on a phone too. The Studio tab in this app works that way.",
-         "ko": "로컬 모델이라고 꼭 내 컴퓨터에서 돌릴 필요는 없습니다. Civitai 같은 곳에서 서버를 빌려 돌리면 휴대폰에서도 쓸 수 있습니다. 이 앱의 실전도 그 방식입니다.",
-         "ja": "ローカルモデルだからといって、必ずしも自分のコンピューターで動かす必要はありません。Civitaiのような場所でサーバーを借りて動かせば、スマホでも使えます。このアプリの「実践」もその方法です。"
+         "en": "A local model does not have to run on your own computer. If you rent a server from a place like Civitai, you can use it on a phone too. The Generator tab in this app works that way.",
+         "ko": "로컬 모델이라고 꼭 내 컴퓨터에서 돌릴 필요는 없습니다. Civitai 같은 곳에서 서버를 빌려 돌리면 휴대폰에서도 쓸 수 있습니다. 이 앱의 생성기 탭도 그 방식입니다.",
+         "ja": "ローカルモデルだからといって、必ずしも自分のコンピューターで動かす必要はありません。Civitaiのような場所でサーバーを借りて動かせば、スマホでも使えます。このアプリの「ジェネレーター」タブもその方法です。"
         },
         "symbol": "cloud",
         "pose": "wave"
@@ -2566,8 +2566,8 @@
        "card": {
         "title": {
          "en": "Real pictures need a “connection”",
-         "ko": "실전에는 ‘연결’이 필요해요",
-         "ja": "実践には「接続」が必要です"
+         "ko": "생성기에는 ‘연결’이 필요해요",
+         "ja": "ジェネレーターには「接続」が必要です"
         },
         "body": {
          "en": "This app does not draw pictures itself. Civitai's server computers draw them. The app passes along your order and brings back the finished picture.",
@@ -3415,9 +3415,9 @@
          "ja": "アプリに貼り付ける"
         },
         "body": {
-         "en": "When you press “Check and Save,” the app asks Civitai whether the key is right, and if it is, it shows your account name. Later, you can open it from “Generate a Picture” in the Studio tab with the key button.",
-         "ko": "‘확인 후 저장’을 누르면 앱이 Civitai에 물어 키가 맞는지 확인하고, 맞으면 계정 이름을 보여 줍니다. 나중에는 실전 탭의 ‘그림 생성’에서 열쇠 버튼으로 열 수 있습니다.",
-         "ja": "「確認して保存」を押すと、アプリがCivitaiに問い合わせてキーが正しいか確かめ、正しければアカウント名を表示します。あとからは、「実践」タブの「画像を生成」で、鍵のボタンから開けます。"
+         "en": "When you press “Check and Save,” the app asks Civitai whether the key is right, and if it is, it shows your account name. Later, you can open it again with the key button in the Generator tab.",
+         "ko": "‘확인 후 저장’을 누르면 앱이 Civitai에 물어 키가 맞는지 확인하고, 맞으면 계정 이름을 보여 줍니다. 나중에는 생성기 탭의 열쇠 버튼으로 다시 열 수 있습니다.",
+         "ja": "「確認して保存」を押すと、アプリがCivitaiに問い合わせてキーが正しいか確かめ、正しければアカウント名を表示します。あとからは、「ジェネレーター」タブの鍵のボタンから開けます。"
         },
         "action": "key"
        }

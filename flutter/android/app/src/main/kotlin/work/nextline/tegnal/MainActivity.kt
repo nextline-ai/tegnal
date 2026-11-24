@@ -51,10 +51,22 @@ class MainActivity : FlutterActivity() {
         // SDK 35 or above: the Flutter UI already keeps clear of the system bars by their insets.
         WindowCompat.enableEdgeToEdge(window)
         super.onCreate(savedInstanceState)
+        // Opened from a cheat-sheet alert: the Dart side takes it and opens the lab on the sheet.
+        LabSheetAlerts.take(intent)
         preferHighestRefreshRate()
         privacyCover.protectTaskSnapshot()
         // The artwork covers the window from the start, as the native launch splash does.
         privacyCover.show()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        LabSheetAlerts.take(intent)
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == LabSheetAlerts.PERMISSION_REQUEST) LabSheetAlerts.permissionResult(applicationContext)
     }
 
     override fun onResume() {
@@ -145,6 +157,8 @@ class MainActivity : FlutterActivity() {
         ImageTranslator.register(this, flutterEngine.dartExecutor.binaryMessenger)
         // Learning mode's sounds, on the media volume.
         StudySound.register(this, flutterEngine.dartExecutor.binaryMessenger)
+        // Alerts for a new cheat-sheet edition.
+        LabSheetAlerts.register(this, flutterEngine.dartExecutor.binaryMessenger)
         // The reader keeps the screen on while a work is open, as the native app does.
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "work.nextline.tegnal/screen").setMethodCallHandler { call, result ->
             when (call.method) {

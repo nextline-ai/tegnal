@@ -7,17 +7,23 @@ import 'package:flutter/rendering.dart';
 import '../../core/lab/learning_courses.dart';
 import '../../core/lab/tag_course.dart';
 import '../../core/booru/booru_models.dart';
+import '../../core/generation/generation_air.dart' show GenerationKind;
+import '../../core/generation/generation_client.dart';
 import '../../core/generation/generation_store.dart';
 import '../../core/study/study_engine.dart';
 import '../../core/study/study_models.dart';
 import '../../core/study/study_path.dart';
 import '../../core/study/study_speed.dart';
+import '../../core/study/study_awards.dart';
 import '../../core/study/study_store.dart';
 import '../../core/support/l10n.dart';
 import '../booru/booru_common.dart';
 import '../design/app_sheet.dart';
 import '../design/ios_controls.dart';
+import '../design/pull_down_menu.dart';
 import '../generation/generator_account_view.dart';
+import '../generation/generator_gallery.dart';
+import '../generation/generator_model_picker.dart';
 import '../generation/generator_sheet.dart';
 import '../generation/generator_view.dart';
 import '../home/home_stage.dart';
@@ -1541,19 +1547,25 @@ class StudyDexView extends StatelessWidget {
   }
 }
 
-// MARK: - Studio
+// MARK: - Generator
 
-/// `StudyLabView`: the Studio, where pictures are generated once an API key is saved.
+/// `StudyLabView`: the 생성기 tab, the picture generator itself rather than a menu that leads to it. Read top to bottom it
+/// is one tool: the canvas with the last picture drawn, the prompt, the model, the button that draws, then what was drawn
+/// before. Without an API key a card above everything says so and leads to the lessons about it. Every setting beyond prompt
+/// and model, and the beginner lock on them, stays in the full generator (`GeneratorView`), one row away.
 class StudyLabView extends StatefulWidget {
   const StudyLabView({super.key, required this.model, required this.start, this.closed, this.generation});
   final StudyModeModel model;
   final ValueChanged<StudyLessonPlan> start;
 
-  /// Called when a tool closes: a picture generated in it may have earned a badge.
+  /// Called when a picture is made or a tool closes: a picture may have earned a badge.
   final VoidCallback? closed;
 
   /// The generator's store; null is the app's own.
   final GenerationStore? generation;
+
+  /// The prompt being written, kept when the tab or the app is left.
+  static const promptKey = 'generation.tabPrompt';
 
   @override
   State<StudyLabView> createState() => _StudyLabViewState();
@@ -1561,6 +1573,24 @@ class StudyLabView extends StatefulWidget {
 
 class _StudyLabViewState extends State<StudyLabView> {
   GenerationStore? _generation;
+  final _run = GenerationRun();
+  final _prompt = TextEditingController();
+  final _focus = FocusNode();
+  int _madeCount = 0;
+  Timer? _estimateTimer;
+  int _estimateToken = 0;
+  double? _estimate;
+  String? _priced;
+
+  BooruContext get _booru => widget.model.booru;
+  GenerationSettings? get _settings => _generation?.settings;
+  String get _trimmed => _prompt.text.trim();
+
+  /// Safe Mode never asks for mature results, whatever the full generator's switch says.
+  GenerationSettings get _sent => _booru.safeMode ? _settings!.copyWith(mature: false) : _settings!;
+
+  /// The picture on the canvas: the newest one made here, else the newest one kept.
+  GeneratedPicture? get _shown => _run.made.firstOrNull ?? _generation?.pictures.firstOrNull;
 
   @override
   void initState() {
@@ -1568,25 +1598,86 @@ class _StudyLabViewState extends State<StudyLabView> {
     try {
       _generation = widget.generation ?? widget.model.generation;
     } on Object {
-      // Without the app's storage, as in a test, the Studio shows no key.
+      // Without the app's storage, as in a test, the generator shows no key.
       _generation = null;
     }
+    _prompt.text = _generation?.defaults.string(StudyLabView.promptKey) ?? '';
     _generation?.addListener(_changed);
+    _run.addListener(_changed);
+    _prompt.addListener(_typed);
     unawaited(_generation?.load());
   }
 
   @override
   void dispose() {
+    _estimateTimer?.cancel();
     _generation?.removeListener(_changed);
+    _run.removeListener(_changed);
+    _run.dispose();
+    _prompt.dispose();
+    _focus.dispose();
     super.dispose();
   }
 
+  void _typed() {
+    _generation?.defaults.set(StudyLabView.promptKey, _prompt.text);
+    _changed();
+  }
+
   void _changed() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    if (_run.made.length > _madeCount) {
+      try {
+        _booru.store.studyStore.raise(StudyCounter.pictures, _generation?.pictures.length ?? 0);
+      } on Object {
+        // Without the study store the count waits for the full generator.
+      }
+      StudySound.tap.play();
+      widget.closed?.call();
+    }
+    _madeCount = _run.made.length;
+    _refreshEstimate();
+    setState(() {});
+  }
+
+  void _refreshEstimate() {
+    final store = _generation, settings = _settings;
+    if (store == null || settings == null) return;
+    final signature = [
+      settings.model?.air ?? '',
+      '${settings.width}x${settings.height}',
+      '${settings.steps}',
+      '${settings.quantity}',
+      '${_sent.mature}',
+      '${store.hasKey}',
+      '${_trimmed.isEmpty}',
+      ...settings.loras.map((lora) => lora.model.air),
+    ].join('|');
+    if (signature == _priced) return;
+    _priced = signature;
+    _estimate = null;
+    _estimateTimer?.cancel();
+    if (!store.hasKey || settings.model == null || _trimmed.isEmpty) return;
+    final token = ++_estimateToken;
+    _estimateTimer = Timer(const Duration(milliseconds: 900), () async {
+      double? value;
+      try {
+        value = await store.client().estimate(prompt: _trimmed, settings: _sent);
+      } on Object {
+        value = null;
+      }
+      if (mounted && token == _estimateToken) setState(() => _estimate = value);
+    });
+  }
+
+  GeneratorEnvironment? get _environment {
+    final store = _generation;
+    return store == null ? null : GeneratorEnvironment(store: store, safeMode: () => _booru.safeMode);
   }
 
   Future<void> _open(Future<void> Function() present) async {
     StudySound.tap.play();
+    _focus.unfocus();
     await present();
     if (mounted) widget.closed?.call();
   }
@@ -1597,40 +1688,92 @@ class _StudyLabViewState extends State<StudyLabView> {
     _open(() => showGeneratorSheet<void>(context, (context) => GeneratorAccountView(store: store)));
   }
 
+  void _openModel() {
+    final environment = _environment;
+    if (environment == null) return;
+    _open(
+      () => _showStudySheet(
+        context,
+        (context) => GeneratorModelPicker(
+          environment: environment,
+          kind: GenerationKind.checkpoint,
+          choose: (model) => environment.store.settings = environment.store.settings.use(model),
+        ),
+      ),
+    );
+  }
+
+  void _openFull() {
+    final store = _generation;
+    if (store == null) return;
+    _open(
+      () => _showStudySheet(
+        context,
+        (context) => GeneratorView(
+          store: store,
+          safeMode: () => _booru.safeMode,
+          prompt: _prompt.text,
+          study: _booru.store.studyStore,
+          onClose: () => Navigator.of(context, rootNavigator: true).pop(),
+        ),
+      ),
+    );
+  }
+
+  void _openPicture(GeneratedPicture picture) {
+    final environment = _environment;
+    if (environment == null) return;
+    _open(() => showGeneratorSheet<void>(context, (context) => GeneratedPictureView(environment: environment, picture: picture, removed: () => _run.forget(picture))));
+  }
+
+  void _openGallery() {
+    final environment = _environment;
+    if (environment == null) return;
+    _open(() => _showStudySheet(context, (context) => GeneratedGalleryView(environment: environment)));
+  }
+
+  void _generate() {
+    _focus.unfocus();
+    final store = _generation;
+    if (store == null) return;
+    if (!store.hasKey) return _openKey();
+    if (store.settings.model == null) return _openModel();
+    StudySound.tap.play();
+    _run.start(prompt: _trimmed, settings: _sent, store: store);
+  }
+
+  String get _status => switch (_run.phase) {
+    GenerationPhase.queued => L10n.text('Waiting in Line…'),
+    GenerationPhase.drawing => L10n.text('Drawing…'),
+    GenerationPhase.saving => L10n.text('Saving…'),
+    _ => L10n.text('Sending…'),
+  };
+
   @override
   Widget build(BuildContext context) {
-    final booru = widget.model.booru;
-    return _Scroll(
-      child: Column(
-        children: [
-          _connection(context),
-          const SizedBox(height: 16),
-          _tool(context, 'generator', 'wand.and.stars', 'Generate a Picture', 'Try a prompt with your own Civitai API key.', () {
-            // Without the generator's store (as in a fixture run without its stand-in) there is nothing to open.
-            final store = _generation;
-            if (store == null) return;
-            _open(
-              () => _showStudySheet(
-                context,
-                (context) => GeneratorView(
-                  store: store,
-                  safeMode: () => booru.safeMode,
-                  study: booru.store.studyStore,
-                  onClose: () => Navigator.of(context, rootNavigator: true).pop(),
-                ),
-              ),
-            );
-          }),
-          const SizedBox(height: 16),
-          _tool(
-            context,
-            'guide',
-            'text.book.closed.fill',
-            'Writing Prompts',
-            'Emphasis, quality tags and what each model recommends.',
-            () => _open(() => _showStudySheet(context, (context) => StudyGuideView(booru: booru))),
-          ),
-        ],
+    final store = _generation;
+    final pictures = store?.pictures ?? const <GeneratedPicture>[];
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onTap: _focus.unfocus,
+      child: _Scroll(
+        padding: const EdgeInsets.only(left: 16, right: 16, top: 8, bottom: 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (!(store?.hasKey ?? false)) ...[_connection(context), const SizedBox(height: 16)],
+            _canvas(context),
+            const SizedBox(height: 16),
+            _promptCard(context),
+            const SizedBox(height: 16),
+            _modelRow(context),
+            const SizedBox(height: 16),
+            _drawButton(context),
+            if (pictures.isNotEmpty) ...[const SizedBox(height: 20), _recent(context, pictures)],
+            const SizedBox(height: 16),
+            _more(context),
+          ],
+        ),
       ),
     );
   }
@@ -1638,7 +1781,6 @@ class _StudyLabViewState extends State<StudyLabView> {
   /// Generating needs an API key. Until one is saved, this card says so and leads to the lessons that explain it.
   Widget _connection(BuildContext context) {
     final theme = StudyTheme.of(context);
-    final connected = _generation?.hasKey ?? false;
     final lesson = StudyPath.bundled.lessons.where((lesson) => lesson.id == 'api-what').firstOrNull;
     return StudyCard(
       child: Column(
@@ -1646,7 +1788,7 @@ class _StudyLabViewState extends State<StudyLabView> {
         children: [
           Row(
             children: [
-              StudyMascot(pose: connected ? StudyMascotPose.cheer : StudyMascotPose.wave, size: 84),
+              const StudyMascot(pose: StudyMascotPose.wave, size: 72),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
@@ -1654,23 +1796,14 @@ class _StudyLabViewState extends State<StudyLabView> {
                   children: [
                     Row(
                       children: [
-                        StudyIcon(connected ? 'checkmark.seal.fill' : 'key.fill', size: 19, color: connected ? theme.good : theme.ink),
+                        StudyIcon('key.fill', size: 19, color: theme.ink),
                         const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            L10n.text(connected ? 'API Key Connected' : 'Connect an API Key First'),
-                            style: StudyTheme.title(19).copyWith(color: connected ? theme.good : theme.ink),
-                          ),
-                        ),
+                        Expanded(child: Text(L10n.text('Connect an API Key First'), style: StudyTheme.title(19).copyWith(color: theme.ink))),
                       ],
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      L10n.text(
-                        connected
-                            ? 'You can generate pictures. Each one is paid for with Buzz from your Civitai account.'
-                            : "Pictures are drawn on Civitai's servers, so the Studio needs your own Civitai API key.",
-                      ),
+                      L10n.text("Pictures are drawn on Civitai's servers, so the Studio needs your own Civitai API key."),
                       style: StudyTheme.body(14, StudyTheme.medium).copyWith(color: theme.muted),
                     ),
                   ],
@@ -1678,60 +1811,375 @@ class _StudyLabViewState extends State<StudyLabView> {
               ),
             ],
           ),
-          if (!connected) ...[
-            if (lesson != null) ...[
-              const SizedBox(height: 12),
-              StudyMainButton(
-                key: const Key('study.lab.learn'),
-                title: L10n.text('Learn What an API Key Is'),
-                symbol: 'graduationcap.fill',
-                onPressed: () {
-                  StudySound.tap.play();
-                  widget.start(StudyLessonPlan.lesson(lesson));
-                },
-              ),
-            ],
+          if (lesson != null) ...[
             const SizedBox(height: 12),
-            StudyMainButton(key: const Key('study.lab.key'), title: L10n.text('Enter the API Key'), color: theme.gold, symbol: 'key.fill', onPressed: _openKey),
+            StudyMainButton(
+              key: const Key('study.lab.learn'),
+              title: L10n.text('Learn What an API Key Is'),
+              symbol: 'graduationcap.fill',
+              onPressed: () {
+                StudySound.tap.play();
+                widget.start(StudyLessonPlan.lesson(lesson));
+              },
+            ),
           ],
+          const SizedBox(height: 12),
+          StudyMainButton(key: const Key('study.lab.key'), title: L10n.text('Enter the API Key'), color: theme.gold, symbol: 'key.fill', onPressed: _openKey),
         ],
       ),
     );
   }
 
-  Widget _tool(BuildContext context, String id, String symbol, String title, String detail, VoidCallback open) {
+  /// The last picture, large. While drawing it shows what the service is doing; before the first picture, what to do.
+  Widget _canvas(BuildContext context) {
     final theme = StudyTheme.of(context);
+    final shown = _shown, store = _generation;
+    final ratio = shown == null ? 1.0 : (shown.width <= 0 ? 1 : shown.width) / (shown.height <= 0 ? 1 : shown.height);
+    final shape = RoundedSuperellipseBorder(borderRadius: BorderRadius.circular(22), side: BorderSide(color: theme.line, width: 2));
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxHeight: 460),
+      child: AspectRatio(
+        aspectRatio: ratio.clamp(0.6, 1.6),
+        child: Container(
+          clipBehavior: Clip.antiAlias,
+          decoration: ShapeDecoration(color: theme.sunken, shape: shape),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 250),
+                child: shown != null && store != null
+                    ? Semantics(
+                        key: ValueKey(shown.id),
+                        button: true,
+                        label: L10n.text('Generated Picture'),
+                        child: GestureDetector(
+                          key: const Key('generator.result'),
+                          onTap: () => _openPicture(shown),
+                          child: Image.file(store.file(shown), fit: BoxFit.contain, gaplessPlayback: true, errorBuilder: (context, error, stack) => const SizedBox()),
+                        ),
+                      )
+                    : _run.isRunning
+                    ? const SizedBox.shrink()
+                    : Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const StudyMascot(pose: StudyMascotPose.read, size: 96),
+                            const SizedBox(height: 10),
+                            Text(L10n.text('studio.empty.title'), style: StudyTheme.body(18, StudyTheme.heavy).copyWith(color: theme.ink)),
+                            const SizedBox(height: 6),
+                            Text(
+                              L10n.text('studio.empty.detail'),
+                              textAlign: TextAlign.center,
+                              style: StudyTheme.body(14, StudyTheme.medium).copyWith(color: theme.muted),
+                            ),
+                          ],
+                        ),
+                      ),
+              ),
+              if (_run.isRunning)
+                Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 20),
+                    decoration: ShapeDecoration(
+                      color: const Color(0x8C000000),
+                      shape: RoundedSuperellipseBorder(borderRadius: BorderRadius.circular(18)),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const CupertinoActivityIndicator(radius: 14, color: Color(0xFFFFFFFF)),
+                        const SizedBox(height: 12),
+                        Text(_status, style: StudyTheme.body(16, StudyTheme.heavy).copyWith(color: const Color(0xFFFFFFFF))),
+                        CupertinoButton(
+                          key: const Key('generator.cancel'),
+                          padding: const EdgeInsets.only(top: 8),
+                          minimumSize: Size.zero,
+                          onPressed: () => _run.cancel(_generation!),
+                          child: Text(L10n.text('Cancel'), style: StudyTheme.body(14, StudyTheme.bold).copyWith(color: const Color(0xD9FFFFFF))),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _promptCard(BuildContext context) {
+    final theme = StudyTheme.of(context);
+    final mono = generatorMonospace(context).copyWith(color: theme.ink);
+    return StudyCard(
+      padding: 14,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(L10n.text('Prompt'), style: StudyTheme.body(14, StudyTheme.heavy).copyWith(color: theme.muted)),
+          const SizedBox(height: 8),
+          CupertinoTextField.borderless(
+            key: const Key('generator.prompt'),
+            controller: _prompt,
+            focusNode: _focus,
+            padding: EdgeInsets.zero,
+            minLines: 4,
+            maxLines: null,
+            keyboardType: TextInputType.multiline,
+            textCapitalization: TextCapitalization.none,
+            autocorrect: false,
+            enableSuggestions: false,
+            placeholder: L10n.text('studio.placeholder'),
+            placeholderStyle: mono.copyWith(color: theme.muted.withValues(alpha: 0.7)),
+            style: mono,
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              Builder(
+                builder: (menuContext) => _chip(context, const Key('generator.preset'), CupertinoIcons.sparkles, L10n.text('studio.presets'), () async {
+                  final preset = await showPullDownMenu<GenerationPreset>(
+                    menuContext,
+                    anchor: anchorRectOf(menuContext),
+                    items: [for (final preset in GenerationPreset.all) PullDownMenuItem(value: preset, title: preset.name)],
+                  );
+                  final store = _generation;
+                  if (preset == null || store == null) return;
+                  _prompt.text = preset.applied(_prompt.text);
+                  store.settings = store.settings.copyWith(negative: preset.negative, steps: preset.steps, guidance: preset.guidance);
+                }),
+              ),
+              _chip(
+                context,
+                const Key('study.lab.guide'),
+                CupertinoIcons.book_fill,
+                L10n.text('Writing Prompts'),
+                () => _open(() => _showStudySheet(context, (context) => StudyGuideView(booru: _booru))),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _chip(BuildContext context, Key key, IconData icon, String title, VoidCallback onTap) {
+    final theme = StudyTheme.of(context);
+    return CupertinoButton(
+      key: key,
+      padding: EdgeInsets.zero,
+      minimumSize: Size.zero,
+      onPressed: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: ShapeDecoration(color: theme.primary.withValues(alpha: 0.12), shape: const StadiumBorder()),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: theme.primary),
+            const SizedBox(width: 6),
+            Text(title, style: StudyTheme.body(13, StudyTheme.heavy).copyWith(color: theme.primary)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _modelRow(BuildContext context) {
+    final theme = StudyTheme.of(context);
+    final model = _settings?.model;
     return StudyPressButton(
-      key: Key('study.lab.$id'),
-      radius: 20,
+      key: const Key('generator.model'),
+      radius: 18,
+      depth: 4,
       outlined: true,
-      onPressed: open,
+      onPressed: _openModel,
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         child: Row(
           children: [
             Container(
-              width: 52,
-              height: 52,
+              width: 40,
+              height: 40,
               decoration: ShapeDecoration(
                 color: theme.primary.withValues(alpha: 0.14),
-                shape: RoundedSuperellipseBorder(borderRadius: BorderRadius.circular(14)),
+                shape: RoundedSuperellipseBorder(borderRadius: BorderRadius.circular(12)),
               ),
-              child: Center(child: StudyIcon(symbol, size: 22, color: theme.primary)),
+              child: Icon(CupertinoIcons.cube_fill, size: 18, color: theme.primary),
             ),
-            const SizedBox(width: 14),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(L10n.text(title), style: StudyTheme.body(18, StudyTheme.heavy).copyWith(color: theme.ink)),
-                  const SizedBox(height: 3),
-                  Text(L10n.text(detail), style: StudyTheme.body(13, StudyTheme.medium).copyWith(color: theme.muted)),
+                  Text(L10n.text('Model'), style: StudyTheme.body(12, StudyTheme.heavy).copyWith(color: theme.muted)),
+                  const SizedBox(height: 2),
+                  Text(
+                    model?.name ?? L10n.text('Choose a Model'),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: StudyTheme.body(16, StudyTheme.heavy).copyWith(color: model == null ? theme.primary : theme.ink),
+                  ),
                 ],
               ),
             ),
             const SizedBox(width: 4),
             StudyIcon('chevron.right', size: 14, color: theme.muted),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _drawButton(BuildContext context) {
+    final theme = StudyTheme.of(context);
+    final settings = _settings, store = _generation;
+    final priced = store != null && settings != null && store.hasKey && settings.model != null && _trimmed.isNotEmpty;
+    final cost = priced ? ' · ${L10n.text('About %@ Buzz', ['${(_estimate ?? settings.roughCost.toDouble()).ceil()}'])}' : '';
+    final error = _run.error, spent = _run.lastCost;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        StudyPressButton(
+          key: const Key('generator.generate'),
+          onPressed: _run.isRunning || _trimmed.isEmpty || store == null ? null : _generate,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 15),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(CupertinoIcons.wand_stars, size: 18, color: Color(0xFFFFFFFF)),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    '${L10n.text('Generate')}$cost',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: StudyTheme.body(18, StudyTheme.heavy).copyWith(color: const Color(0xFFFFFFFF)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (error != null) ...[
+          const SizedBox(height: 8),
+          Row(
+            key: const Key('generator.error'),
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(CupertinoIcons.exclamationmark_triangle_fill, size: 15, color: theme.bad),
+              const SizedBox(width: 6),
+              Expanded(child: Text(error.message, style: StudyTheme.body(14, StudyTheme.semibold).copyWith(color: theme.bad))),
+            ],
+          ),
+        ] else if (spent != null && !_run.isRunning) ...[
+          const SizedBox(height: 8),
+          Text(
+            L10n.text('The last request cost %@ Buzz.', ['${spent.ceil()}']),
+            textAlign: TextAlign.center,
+            style: StudyTheme.body(13, StudyTheme.medium).copyWith(color: theme.muted),
+          ),
+        ],
+      ],
+    );
+  }
+
+  /// What was drawn before, newest first, a tap from the picture and its settings.
+  Widget _recent(BuildContext context, List<GeneratedPicture> pictures) {
+    final theme = StudyTheme.of(context);
+    final store = _generation!;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Flexible(
+              child: Text(
+                L10n.text('Generated Pictures'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: StudyTheme.body(17, StudyTheme.heavy).copyWith(color: theme.ink),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text('${pictures.length}', style: StudyTheme.body(14, StudyTheme.heavy).copyWith(color: theme.muted)),
+            const Spacer(),
+            const SizedBox(width: 8),
+            CupertinoButton(
+              key: const Key('generator.gallery'),
+              padding: EdgeInsets.zero,
+              minimumSize: Size.zero,
+              onPressed: _openGallery,
+              child: Text(L10n.text('studio.all'), style: StudyTheme.body(14, StudyTheme.heavy).copyWith(color: theme.primary)),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        SizedBox(
+          height: 96,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: math.min(pictures.length, 12),
+            separatorBuilder: (context, index) => const SizedBox(width: 10),
+            itemBuilder: (context, index) {
+              final picture = pictures[index];
+              return Semantics(
+                button: true,
+                label: L10n.text('Generated Picture'),
+                child: GestureDetector(
+                  key: const Key('generator.recent'),
+                  onTap: () => _openPicture(picture),
+                  child: Container(
+                    width: 96,
+                    clipBehavior: Clip.antiAlias,
+                    decoration: ShapeDecoration(
+                      color: theme.sunken,
+                      shape: RoundedSuperellipseBorder(borderRadius: BorderRadius.circular(14), side: BorderSide(color: theme.line, width: 1.5)),
+                    ),
+                    child: Image.file(store.file(picture), fit: BoxFit.cover, cacheWidth: 240, gaplessPlayback: true, errorBuilder: (context, error, stack) => const SizedBox()),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Size, steps, LoRAs, things to avoid: the full generator, with the prompt written here.
+  Widget _more(BuildContext context) {
+    final theme = StudyTheme.of(context);
+    return StudyPressButton(
+      key: const Key('study.lab.generator'),
+      radius: 16,
+      depth: 3,
+      outlined: true,
+      onPressed: _openFull,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            Icon(CupertinoIcons.slider_horizontal_3, size: 17, color: theme.muted),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(L10n.text('studio.more'), style: StudyTheme.body(15, StudyTheme.heavy).copyWith(color: theme.ink)),
+                  const SizedBox(height: 2),
+                  Text(L10n.text('studio.more.detail'), style: StudyTheme.body(12, StudyTheme.medium).copyWith(color: theme.muted)),
+                ],
+              ),
+            ),
+            const SizedBox(width: 4),
+            StudyIcon('chevron.right', size: 13, color: theme.muted),
           ],
         ),
       ),

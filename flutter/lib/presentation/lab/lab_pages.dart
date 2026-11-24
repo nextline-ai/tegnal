@@ -9,12 +9,14 @@ import 'package:flutter/services.dart';
 
 import '../../core/lab/lab_course.dart';
 import '../../core/lab/lab_sheet.dart';
+import '../../core/lab/lab_sheet_alerts.dart';
 import '../../core/lab/lab_store.dart';
 import '../../core/lab/learning_courses.dart';
 import '../../core/support/l10n.dart';
 import '../design/alert_dialog.dart';
 import '../design/app_sheet.dart';
 import '../design/glass.dart';
+import '../design/ios_controls.dart';
 import '../design/grouped_form.dart';
 import '../design/tegnal_theme.dart';
 import '../study_mode/study_kit.dart';
@@ -120,6 +122,8 @@ class _LabSheetViewState extends State<LabSheetView> {
                         style: LabFont.text(17, weight: FontWeight.w600, color: labSecondary(context)),
                       ),
                     ),
+                  // At the very foot: whether a new edition should be told when it comes out.
+                  if (LabSheetAlerts.supported) ...[const SizedBox(height: 24), const LabSheetAlertToggle()],
                 ],
               ),
             ),
@@ -128,6 +132,108 @@ class _LabSheetViewState extends State<LabSheetView> {
       );
     },
   );
+}
+
+/// The switch at the foot of the cheat sheet: a notification when a new edition is published (`LabSheetAlertToggle`).
+/// Turning it on asks Android for permission; refused, or taken back later in the system settings, it says where to allow it.
+class LabSheetAlertToggle extends StatefulWidget {
+  const LabSheetAlertToggle({super.key});
+
+  @override
+  State<LabSheetAlertToggle> createState() => _LabSheetAlertToggleState();
+}
+
+class _LabSheetAlertToggleState extends State<LabSheetAlertToggle> {
+  bool on = false, blocked = false, working = false;
+  late final AppLifecycleListener _lifecycle;
+
+  @override
+  void initState() {
+    super.initState();
+    _lifecycle = AppLifecycleListener(onResume: _refresh);
+    _refresh();
+  }
+
+  @override
+  void dispose() {
+    _lifecycle.dispose();
+    super.dispose();
+  }
+
+  /// The switch can be on while Android no longer lets the app notify; that is said, not hidden.
+  Future<void> _refresh() async {
+    final value = await LabSheetAlerts.isOn(), allowed = await LabSheetAlerts.allowed();
+    if (!mounted) return;
+    setState(() {
+      on = value;
+      blocked = (on || blocked) && !allowed;
+    });
+  }
+
+  Future<void> _change(bool wanted) async {
+    LabHaptic.tick();
+    setState(() {
+      on = wanted;
+      working = true;
+    });
+    final done = await LabSheetAlerts.set(wanted, known: LabStore.shared.edition?.date);
+    final value = await LabSheetAlerts.isOn();
+    if (!mounted) return;
+    setState(() {
+      on = value;
+      blocked = wanted && !done;
+      working = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final secondary = labSecondary(context);
+    final red = LabPalette.fail.resolveFrom(context);
+    return Container(
+      key: const Key('lab.sheet.alerts'),
+      padding: const EdgeInsets.all(14),
+      decoration: ShapeDecoration(
+        color: FormColors.listRow.resolveFrom(context),
+        shape: RoundedSuperellipseBorder(borderRadius: BorderRadius.circular(18)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(on ? CupertinoIcons.bell_fill : CupertinoIcons.bell, size: 20, color: on ? red : secondary),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(L10n.text('lab.sheet.alerts'), style: LabFont.text(16, weight: FontWeight.w600, color: labLabel(context))),
+                    const SizedBox(height: 2),
+                    Text(L10n.text('lab.sheet.alerts.detail'), style: LabFont.text(13, color: secondary)),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              TegnalSwitch(value: on, onChanged: working ? null : _change),
+            ],
+          ),
+          if (blocked) ...[
+            const SizedBox(height: 10),
+            Text(L10n.text('lab.sheet.alerts.blocked'), style: LabFont.text(13, color: red)),
+            const SizedBox(height: 4),
+            CupertinoButton(
+              key: const Key('lab.sheet.alerts.settings'),
+              padding: EdgeInsets.zero,
+              minimumSize: Size.zero,
+              onPressed: LabSheetAlerts.openSettings,
+              child: Text(L10n.text('lab.sheet.alerts.settings'), style: LabFont.text(13, weight: FontWeight.w600, color: CupertinoTheme.of(context).primaryColor)),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 }
 
 /// The day the sheet was curated, as a small red rubber stamp beside the title (`LabSheetStamp`).
