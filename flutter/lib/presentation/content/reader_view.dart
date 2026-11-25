@@ -323,9 +323,10 @@ class _NativeReaderViewState extends State<NativeReaderView> with TickerProvider
       builder: (context) => TegnalAlertDialog(
         title: Text(L10n.text('Continue Reading?')),
         content: Text(L10n.text('Continue from page %@?', ['${_opening.page}'])),
+        // Cancel first, as the native alert puts its cancel button on the left.
         actions: [
-          CupertinoDialogAction(isDefaultAction: true, onPressed: () => Navigator.pop(context, true), child: Text(L10n.text('Continue Reading'))),
           CupertinoDialogAction(onPressed: () => Navigator.pop(context, false), child: Text(L10n.text('Cancel'))),
+          CupertinoDialogAction(isDefaultAction: true, onPressed: () => Navigator.pop(context, true), child: Text(L10n.text('Continue Reading'))),
         ],
       ),
     );

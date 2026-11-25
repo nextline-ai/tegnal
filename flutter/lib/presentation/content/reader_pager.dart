@@ -171,6 +171,19 @@ class _ReaderContinuousViewState extends State<ReaderContinuousView> {
     }
   }
 
+  /// A page chosen outside the list (continuing where you left off, a preview, Go to Page)
+  /// scrolls to it, as the native view's scroll position follows `current`.
+  @override
+  void didUpdateWidget(ReaderContinuousView old) {
+    super.didUpdateWidget(old);
+    final controller = _controller;
+    if (controller == null || widget.current == _reported) return;
+    _reported = widget.current;
+    if (!controller.hasClients) return;
+    final position = controller.position;
+    controller.jumpTo(math.min(_offset(widget.current), position.hasContentDimensions ? position.maxScrollExtent : double.infinity));
+  }
+
   @override
   void dispose() {
     _controller?.dispose();
